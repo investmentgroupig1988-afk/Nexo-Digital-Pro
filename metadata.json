@@ -1,0 +1,6 @@
+{
+  "name": "Nexo Digital Pro",
+  "description": "AI Trading Bot for Gold (XAU/USD) and Bitcoin (BTC/USD) with real-time signals, strict risk management, and Mercado Pago integration.",
+  "requestFramePermissions": ["notifications"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
