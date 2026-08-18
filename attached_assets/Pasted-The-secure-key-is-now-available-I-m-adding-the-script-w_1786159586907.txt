@@ -1,0 +1,46 @@
+The secure key is now available. I’m adding the script with native Node fetch (no extra dependency), concurrent BTC/gold requests, readable quote formatting, and explicit handling for missing credentials, API errors, and unavailable symbols.
+
+
+3 actions
+The script is in place. I’m running the package typecheck and then the command itself against Finnhub to confirm the secure key, symbols, and output all work together.
+
+
+4 actions
+The code typechecks, and Finnhub accepted the credential for the crypto request, but the gold symbol is returning a resource-level 403 Forbidden. I’m improving the script so it still prints any successful quote and reports the unavailable market clearly instead of hiding the BTC result behind one failed request.
+
+
+2 actions
+The fallback behavior is updated. I’m doing one final typecheck and run now so the command’s actual output is confirmed after the change.
+
+
+3 actions
+The final check confirms the script works for BTC and correctly identifies the gold limitation: Finnhub is denying OANDA:XAU_USD for this account with 403 Forbidden, so the script reports that asset explicitly and exits nonzero rather than presenting a fabricated value. I’m running the workspace-wide typecheck once to make sure the addition doesn’t affect anything else.
+
+
+Checked for code errors
+The workspace-wide checks pass. I’m recording one durable note about Finnhub’s symbol-level access behavior so future changes don’t mistake the gold 403 for a code or credential failure.
+
+
+2 actions
+The implementation and checks are complete. I’m just finishing the project note cleanly so the observed Finnhub permission behavior is preserved for future work.
+
+
+2 actions
+Implemented the Finnhub command-line market quote script.
+
+Run it with:
+
+pnpm --filter @workspace/scripts run market-quotes
+
+It:
+
+Uses the secure FINNHUB_API_KEY secret
+Fetches BTC and gold quotes concurrently
+Formats price, change, daily range, and previous close
+Handles missing keys and API errors explicitly
+Prints successful quotes even if another market fails
+Verification:
+
+Workspace-wide typecheck passes.
+BTC returned successfully.
+Finnhub currently returns 403 Forbidden for OANDA:XAU_USD with this account, so gold is reported as unavailable rather than showing an incorrect value.

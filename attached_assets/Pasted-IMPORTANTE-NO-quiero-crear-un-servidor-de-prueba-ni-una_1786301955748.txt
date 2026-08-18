@@ -1,0 +1,292 @@
+IMPORTANTE: NO quiero crear un servidor de prueba ni una señal ficticia.
+
+Quiero convertir este proyecto en el BACKEND REAL de mi aplicación de análisis de mercados.
+
+Mantén el servidor Express y la configuración actual de ejecución. NO borres el proyecto ni reemplaces el package.json ni la configuración del workspace.
+
+El objetivo final es que este backend sea consumido por mi frontend de AI Studio mediante una API HTTP.
+
+ACTIVOS:
+
+1. BTC/USD utilizando datos reales de Binance.
+2. XAU/USD utilizando datos reales de mercado mediante el proveedor que ya está configurado y probado en este proyecto (Alpha Vantage/Finnhub según corresponda).
+
+NO utilizar datos simulados, aleatorios, hardcodeados ni ejemplos ficticios en ninguna parte del motor.
+
+DATOS DE MERCADO:
+
+Implementa un servicio robusto que obtenga datos OHLCV históricos y precio actual.
+
+Necesito como mínimo los timeframes:
+- 1m
+- 5m
+- 15m
+- 1h
+- 4h
+
+El backend debe actualizar los datos automáticamente y mantener una caché para evitar solicitudes innecesarias y respetar los límites de las APIs.
+
+INDICADORES:
+
+Implementa matemáticamente en el backend:
+
+- EMA 20
+- EMA 50
+- EMA 200
+- SMA 20
+- RSI 14
+- volumen
+- media de volumen
+- Fibonacci basado en el swing high/swing low del período definido
+- tendencia
+- estructura de mercado
+- máximos y mínimos relevantes
+- soporte y resistencia
+
+No inventes valores cuando falten datos.
+
+Si no existen suficientes velas para calcular un indicador, devolver null y explicar "datos insuficientes".
+
+MOTOR DE SEÑALES:
+
+Crear un motor determinístico y auditable.
+
+NO quiero que OpenAI invente señales.
+
+La señal BUY/SELL/HOLD debe salir primero del motor matemático.
+
+Crear un sistema de puntuación de 0 a 6:
+
++1 tendencia favorable
++1 EMA20/EMA50
++1 posición respecto a EMA200
++1 RSI
++1 Fibonacci
++1 volumen/estructura de mercado
+
+Definir claramente las condiciones que otorgan cada punto.
+
+La señal solamente podrá ser:
+
+BUY
+SELL
+HOLD
+NO_TRADE
+
+Si la evidencia técnica es insuficiente o contradictoria, utilizar HOLD o NO_TRADE.
+
+NO generar señales simplemente porque el usuario pidió una señal.
+
+RIESGO:
+
+Cada señal debe incluir:
+
+- symbol
+- timeframe
+- signal
+- score
+- confidence
+- entry
+- stopLoss
+- takeProfit
+- riskReward
+- timestamp
+- reasons
+- indicadores completos utilizados en el momento de generar la señal
+- source: LIVE
+
+El confidence NO debe presentarse como una probabilidad matemática de ganar si no existe un modelo estadístico validado.
+
+Si se muestra confidence, llamarlo "Technical Score" o "Signal Strength" y dejar claro que NO representa probabilidad garantizada de beneficio.
+
+TP/SL:
+
+Crear una metodología determinística para calcular SL y TP basada en volatilidad/ATR, estructura y/o niveles técnicos.
+
+Nunca prometer ganancias.
+
+ESTADÍSTICAS:
+
+Crear almacenamiento persistente para las señales LIVE.
+
+Cada señal debe guardar:
+
+- ID
+- activo
+- timeframe
+- fecha/hora de entrada
+- precio de entrada
+- señal
+- SL
+- TP
+- fecha/hora de cierre
+- precio de cierre
+- resultado
+- P&L porcentual
+- motivo de cierre: TP HIT / SL HIT / INVALIDATED / MANUAL
+- indicadores existentes en el momento de entrada
+- score
+- source
+
+El sistema debe poder calcular:
+
+- operaciones totales
+- ganadoras
+- perdedoras
+- win rate
+- profit acumulado
+- pérdida acumulada
+- profit factor
+- mejor operación
+- peor operación
+- drawdown máximo
+- promedio de ganancia
+- promedio de pérdida
+- expectativa matemática
+
+MUY IMPORTANTE:
+
+No inventar estadísticas.
+
+Si todavía no existen suficientes operaciones reales, devolver "Datos insuficientes".
+
+No mostrar 80%, 90%, 95% de efectividad salvo que exista un historial real que lo respalde.
+
+HISTORIAL:
+
+Crear endpoints para consultar:
+
+GET /api/market
+GET /api/indicators
+GET /api/signal
+GET /api/signals
+GET /api/history
+GET /api/stats
+
+Permitir parámetros:
+
+symbol
+timeframe
+limit
+
+Ejemplos:
+
+/api/signal?symbol=BTCUSDT&timeframe=15m
+
+/api/signal?symbol=XAUUSD&timeframe=15m
+
+/api/history?symbol=BTCUSDT
+
+/api/stats?symbol=BTCUSDT
+
+API:
+
+CORS debe permitir que mi frontend de AI Studio pueda consumir el backend.
+
+Todas las respuestas deben ser JSON.
+
+Agregar manejo correcto de:
+
+- API caída
+- timeout
+- rate limit
+- símbolo inválido
+- datos insuficientes
+- proveedor sin datos
+- errores internos
+
+Nunca devolver una señal falsa cuando falle un proveedor.
+
+Si el proveedor está caído, devolver:
+
+status: "UNAVAILABLE"
+
+y explicar el motivo.
+
+ACTUALIZACIÓN:
+
+El backend debe actualizar automáticamente los datos sin que un usuario tenga que solicitar manualmente cada análisis.
+
+Implementar un scheduler seguro.
+
+No crear múltiples intervalos duplicados si el servidor se reinicia.
+
+SALUD DEL SERVIDOR:
+
+Crear:
+
+GET /health
+
+Debe devolver:
+
+status
+serverTime
+providers
+lastMarketUpdate
+version
+
+DOCUMENTACIÓN:
+
+Crear documentación clara del API explicando cada endpoint y ejemplo de respuesta.
+
+TESTS:
+
+Crear pruebas para:
+
+- indicadores
+- señal
+- score
+- validación de símbolos
+- falta de datos
+- errores de proveedores
+
+IMPORTANTE SOBRE OPENAI:
+
+OpenAI puede utilizarse únicamente como capa EXPLICATIVA opcional.
+
+La IA NO debe decidir arbitrariamente BUY/SELL.
+
+Si OPENAI_API_KEY está disponible, puede recibir los indicadores y explicar en lenguaje natural por qué el motor técnico produjo la señal.
+
+Si OpenAI no está disponible, el motor debe seguir funcionando normalmente.
+
+Nunca enviar API keys al frontend.
+
+SEGURIDAD:
+
+Todas las API keys deben permanecer en Secrets/environment variables.
+
+Nunca escribir claves en el código.
+
+No exponer secretos en respuestas HTTP, logs ni documentación.
+
+IMPORTANTE:
+
+Antes de modificar cualquier cosa, inspecciona la arquitectura existente y reutiliza los servicios que ya funcionan.
+
+NO reemplaces el workspace por un proyecto simple.
+
+NO uses AAPL.
+
+NO uses datos ficticios.
+
+NO uses precios hardcodeados.
+
+NO afirmes que el sistema tiene una determinada rentabilidad hasta tener historial real.
+
+Cuando termines:
+
+1. ejecuta typecheck;
+2. ejecuta tests;
+3. inicia el servidor;
+4. prueba /health;
+5. prueba BTC;
+6. prueba XAU;
+7. prueba /api/signal;
+8. prueba /api/history;
+9. prueba /api/stats;
+10. informa exactamente qué funciona y qué queda bloqueado por proveedores, límites de API o configuración de Replit.
+
+No me pidas crear otro proyecto.
+
+No borres el backend existente.

@@ -1,0 +1,387 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: market
+    description: Market analysis operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /signal:
+    get:
+      operationId: getMarketSignal
+      tags: [market]
+      summary: Get a market signal
+      description: Returns an indicative, non-executable market analysis. BTCUSDT uses Binance; XAUUSD returns current Twelve Data market data because no XAU/USD signal strategy is implemented.
+      parameters:
+        - name: symbol
+          in: query
+          required: false
+          description: Market symbol, for example BTCUSDT or XAUUSD
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9]{2,20}$"
+            default: BTCUSDT
+      responses:
+        "200":
+          description: Market signal
+          content:
+            application/json:
+               schema:
+                 oneOf:
+                   - $ref: "#/components/schemas/MarketSignal"
+                   - $ref: "#/components/schemas/GoldMarketData"
+        "400":
+          description: Invalid symbol
+        "502":
+          description: Market data unavailable
+  /market:
+    get:
+      operationId: getMarketData
+      tags: [market]
+      summary: Get current market data
+      description: Returns real current market data. BTC symbols use Binance; XAUUSD uses Twelve Data.
+      parameters:
+        - name: symbol
+          in: query
+          required: false
+          description: Market symbol, for example BTCUSDT or XAUUSD
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9]{2,20}$"
+            default: BTCUSDT
+      responses:
+        "200":
+          description: Current market data
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/CryptoMarketData"
+                  - $ref: "#/components/schemas/GoldMarketData"
+        "400":
+          description: Invalid market symbol
+        "502":
+          description: Market data provider unavailable
+        "429":
+          description: Market data provider rate limited
+        "503":
+          description: Market data configuration unavailable
+  /candles:
+    get:
+      operationId: getHistoricalCandles
+      tags: [market]
+      summary: Get historical real candles
+      description: Returns normalized real OHLCV candles. BTCUSDT uses Binance and XAUUSD uses Twelve Data when TWELVEDATA_API_KEY is configured.
+      parameters:
+        - name: symbol
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [BTCUSDT, XAUUSD]
+            default: BTCUSDT
+        - name: timeframe
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [1m, 5m, 15m, 1h, 4h]
+            default: 15m
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 200
+      responses:
+        "200":
+          description: Historical candle result
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/HistoricalCandles"
+                  - $ref: "#/components/schemas/UnavailableHistoricalCandles"
+        "400":
+          description: Invalid historical query
+        "502":
+          description: Historical provider unavailable
+  /indicators:
+    get:
+      operationId: getTechnicalIndicators
+      tags: [market]
+      summary: Calculate technical indicators
+      description: Calculates deterministic indicators from real historical candles. It never fabricates missing values.
+      parameters:
+        - name: symbol
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [BTCUSDT, XAUUSD]
+            default: BTCUSDT
+        - name: timeframe
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [1m, 5m, 15m, 1h, 4h]
+            default: 15m
+      responses:
+        "200":
+          description: Technical analysis result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TechnicalIndicatorsResponse"
+        "400":
+          description: Invalid historical query
+        "502":
+          description: Historical provider unavailable
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    MarketSignal:
+      type: object
+      properties:
+        symbol:
+          type: string
+        signal:
+          type: string
+          enum: [BUY, SELL, HOLD]
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 100
+        price:
+          type: number
+        analysis:
+          type: object
+          properties:
+            currentPrice:
+              type: number
+            previousPrice:
+              type: number
+            priceChangePercent:
+              type: number
+            sma:
+              type: number
+            rsi:
+              type: number
+            sampleSize:
+              type: number
+            interval:
+              type: string
+          required:
+            - currentPrice
+            - previousPrice
+            - priceChangePercent
+            - sma
+            - rsi
+            - sampleSize
+            - interval
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - symbol
+        - signal
+        - confidence
+        - price
+        - analysis
+        - updatedAt
+    CryptoMarketData:
+      type: object
+      properties:
+        symbol:
+          type: string
+        price:
+          type: number
+        currency:
+          type: string
+          enum: [USDT]
+        unit:
+          type: string
+          enum: [base_asset]
+        updatedAt:
+          type: string
+          format: date-time
+        provider:
+          type: string
+          enum: [binance]
+        assetClass:
+          type: string
+          enum: [crypto]
+      required:
+        - symbol
+        - price
+        - currency
+        - unit
+        - updatedAt
+        - provider
+        - assetClass
+    GoldMarketData:
+      type: object
+      properties:
+        symbol:
+          type: string
+          enum: [XAUUSD]
+        price:
+          type: number
+        currency:
+          type: string
+          enum: [USD]
+        unit:
+          type: string
+          enum: [troy_ounce]
+        updatedAt:
+          type: string
+          format: date-time
+        provider:
+          type: string
+          enum: [twelvedata]
+        assetClass:
+          type: string
+          enum: [gold]
+      required:
+        - symbol
+        - price
+        - currency
+        - unit
+        - updatedAt
+        - provider
+        - assetClass
+    HistoricalCandle:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        open:
+          type: number
+        high:
+          type: number
+        low:
+          type: number
+        close:
+          type: number
+        volume:
+          type: number
+          nullable: true
+      required: [timestamp, open, high, low, close, volume]
+    HistoricalCandles:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [OK]
+        symbol:
+          type: string
+          enum: [BTCUSDT, XAUUSD]
+        timeframe:
+          type: string
+        provider:
+          type: string
+          enum: [binance, twelvedata]
+        candles:
+          type: array
+          items:
+            $ref: "#/components/schemas/HistoricalCandle"
+        availableTimeframes:
+          type: array
+          items:
+            type: string
+        message:
+          type: "null"
+      required: [status, symbol, timeframe, provider, candles, availableTimeframes, message]
+    UnavailableHistoricalCandles:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [UNAVAILABLE]
+        symbol:
+          type: string
+          enum: [XAUUSD]
+        timeframe:
+          type: string
+        provider:
+          type: string
+          enum: [twelvedata]
+        candles:
+          type: array
+          maxItems: 0
+          items: {}
+        availableTimeframes:
+          type: array
+          maxItems: 0
+          items: {}
+        message:
+          type: string
+      required: [status, symbol, timeframe, provider, candles, availableTimeframes, message]
+    TechnicalIndicatorsResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [OK, INSUFFICIENT_DATA, UNAVAILABLE]
+        message:
+          type: string
+          nullable: true
+        symbol:
+          type: string
+        timeframe:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+          nullable: true
+        price:
+          type: number
+          nullable: true
+        candlesUsed:
+          type: number
+        indicators:
+          type: object
+          additionalProperties: true
+          nullable: true
+        fibonacci:
+          type: object
+          additionalProperties: true
+          nullable: true
+        marketStructure:
+          type: object
+          additionalProperties: true
+          nullable: true
+        dataQuality:
+          type: object
+          additionalProperties: true
+      required: [status, message, symbol, timeframe, timestamp, price, candlesUsed, indicators, fibonacci, marketStructure, dataQuality]

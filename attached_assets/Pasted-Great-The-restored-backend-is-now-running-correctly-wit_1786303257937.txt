@@ -1,0 +1,87 @@
+Great. The restored backend is now running correctly with real Binance BTC data.
+
+Do NOT change the existing BTC functionality.
+
+The next objective is ONLY to add real XAU/USD market data.
+
+IMPORTANT:
+- No mock data.
+- No random values.
+- No hardcoded prices.
+- Do not use AAPL.
+- Do not modify the existing frontend.
+- Do not work on payments.
+- Do not work on authentication.
+- Do not deploy yet.
+- Do not integrate AI Studio yet.
+- Do not use OpenAI for the market price itself.
+
+Use the existing securely configured market-data provider credentials from the project Secrets.
+
+For XAU/USD, use the Alpha Vantage GOLD_SILVER_SPOT endpoint that was previously verified to return real gold spot data.
+
+The API key must remain server-side in an environment variable/Secret named:
+
+ALPHAVANTAGE_API_KEY
+
+Never expose the key to the frontend, API responses, logs, or source code.
+
+Implement a modular gold market service under the existing artifacts/api-server architecture.
+
+The service must return:
+
+- symbol: XAUUSD
+- price
+- currency: USD
+- unit: troy_ounce
+- updatedAt
+- provider: alphavantage
+
+Handle:
+- missing API key
+- provider errors
+- rate limits
+- malformed responses
+- unavailable market data
+- timeouts
+
+When unavailable, return an honest unavailable/error state. Never fabricate a price.
+
+Add XAU/USD support to the existing API without breaking BTC.
+
+The existing endpoint should support:
+
+GET /api/signal?symbol=BTCUSDT
+
+and:
+
+GET /api/signal?symbol=XAUUSD
+
+For BTC, keep using the existing Binance implementation.
+
+For XAUUSD, use Alpha Vantage.
+
+The endpoint response for XAUUSD should clearly distinguish gold from crypto.
+
+Also add a simple market endpoint if appropriate:
+
+GET /api/market?symbol=BTCUSDT
+
+GET /api/market?symbol=XAUUSD
+
+Return the current real market data.
+
+After implementation:
+
+1. Run the existing API build.
+2. Start the existing API server.
+3. Test /api/healthz.
+4. Test BTCUSDT.
+5. Test XAUUSD.
+6. Verify the XAU/USD price is actually coming from Alpha Vantage.
+7. Confirm no mock/random/hardcoded market values were introduced.
+8. Confirm BTC still works after the change.
+
+Do not proceed to indicators, OpenAI, signals, historical data, authentication, payments, or frontend integration.
+
+Stop after XAU/USD is working and report exactly what was implemented and verified.
