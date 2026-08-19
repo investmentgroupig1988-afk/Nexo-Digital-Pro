@@ -1,20 +1,224 @@
-// Export your models here. Add one export per file
-// export * from "./posts";
-//
-// Each model/table should ideally be split into different files.
-// Each model/table should define a Drizzle table, insert schema, and types:
-//
-//   import { pgTable, text, serial } from "drizzle-orm/pg-core";
-//   import { createInsertSchema } from "drizzle-zod";
-//   import { z } from "zod/v4";
-//
-//   export const postsTable = pgTable("posts", {
-//     id: serial("id").primaryKey(),
-//     title: text("title").notNull(),
-//   });
-//
-//   export const insertPostSchema = createInsertSchema(postsTable).omit({ id: true });
-//   export type InsertPost = z.infer<typeof insertPostSchema>;
-//   export type Post = typeof postsTable.$inferSelect;
+import { sql } from "drizzle-orm";
+import {
+  boolean,
+  index,
+  jsonb,
+  numeric,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+  varchar,
+} from "drizzle-orm/pg-core";
 
-export {}
+const createdAt = timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
+const updatedAt = timestamp("updated_at", { withTimezone: true }).notNull().defaultNow();
+
+/** Better Auth core schema, extended with Nexo access-control fields. */
+export const users = pgTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  image: text("image"),
+  username: varchar("username", { length: 32 }).notNull(),
+  displayUsername: varchar("display_username", { length: 32 }).notNull(),
+  role: varchar("role", { length: 64 }).notNull().default("user"),
+  status: varchar("status", { length: 32 }).notNull().default("active"),
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  createdAt,
+  updatedAt,
+}, (table) => [
+  uniqueIndex("user_email_lower_unique").on(sql`lower(${table.email})`),
+  uniqueIndex("user_username_lower_unique").on(sql`lower(${table.username})`),
+]);
+
+export const sessions = pgTable("session", {
+  id: text("id").primaryKey(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  token: text("token").notNull(),
+  createdAt,
+  updatedAt,
+  ipAddress: varchar("ip_address", { length: 64 }),
+  userAgent: text("user_agent"),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+}, (table) => [
+  uniqueIndex("session_token_unique").on(table.token),
+  index("session_user_id_index").on(table.userId),
+]);
+
+export const accounts = pgTable("account", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id").notNull(),
+  providerId: varchar("provider_id", { length: 128 }).notNull(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  idToken: text("id_token"),
+  accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }),
+  refreshTokenExpiresAt: timestamp("refresh_token_expires_at", { withTimezone: true }),
+  scope: text("scope"),
+  password: text("password"),
+  createdAt,
+  updatedAt,
+}, (table) => [
+  index("account_user_id_index").on(table.userId),
+  uniqueIndex("account_provider_account_unique").on(table.providerId, table.accountId),
+]);
+
+export const verifications = pgTable("verification", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt,
+  updatedAt,
+}, (table) => [index("verification_identifier_index").on(table.identifier)]);
+
+/** The permission catalog permits future support/staff roles without changing user rows. */
+export const roles = pgTable("roles", {
+  code: varchar("code", { length: 64 }).primaryKey(),
+  name: varchar("name", { length: 128 }).notNull(),
+  description: text("description"),
+  createdAt,
+  updatedAt,
+});
+
+export const permissions = pgTable("permissions", {
+  code: varchar("code", { length: 64 }).primaryKey(),
+  description: text("description").notNull(),
+  createdAt,
+});
+
+export const rolePermissions = pgTable("role_permissions", {
+  roleCode: varchar("role_code", { length: 64 }).notNull().references(() => roles.code, { onDelete: "cascade" }),
+  permissionCode: varchar("permission_code", { length: 64 }).notNull().references(() => permissions.code, { onDelete: "cascade" }),
+  createdAt,
+}, (table) => [primaryKey({ columns: [table.roleCode, table.permissionCode] })]);
+
+export const accessGrants = pgTable("access_grants", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  plan: varchar("plan", { length: 64 }).notNull(),
+  accessType: varchar("access_type", { length: 64 }).notNull(),
+  status: varchar("status", { length: 32 }).notNull().default("pending"),
+  grantedAt: timestamp("granted_at", { withTimezone: true }),
+  grantedBy: text("granted_by").references(() => users.id, { onDelete: "set null" }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  revokedBy: text("revoked_by").references(() => users.id, { onDelete: "set null" }),
+  reason: text("reason"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  createdAt,
+  updatedAt,
+}, (table) => [
+  index("access_grants_user_status_index").on(table.userId, table.status),
+  index("access_grants_plan_index").on(table.plan),
+]);
+
+export const auditLogs = pgTable("audit_logs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  actorUserId: text("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+  targetUserId: text("target_user_id").references(() => users.id, { onDelete: "set null" }),
+  action: varchar("action", { length: 64 }).notNull(),
+  metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
+  ip: varchar("ip", { length: 64 }),
+  userAgent: text("user_agent"),
+  createdAt,
+}, (table) => [
+  index("audit_logs_target_created_index").on(table.targetUserId, table.createdAt),
+  index("audit_logs_actor_created_index").on(table.actorUserId, table.createdAt),
+]);
+
+/** Persistence only: payment providers are intentionally not integrated in this phase. */
+export const payments = pgTable("payments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  provider: varchar("provider", { length: 64 }).notNull(),
+  providerPaymentId: varchar("provider_payment_id", { length: 255 }),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).notNull(),
+  status: varchar("status", { length: 32 }).notNull(),
+  paymentMethodType: varchar("payment_method_type", { length: 64 }),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  createdAt,
+}, (table) => [
+  uniqueIndex("payments_provider_payment_unique").on(table.provider, table.providerPaymentId),
+  index("payments_user_created_index").on(table.userId, table.createdAt),
+]);
+
+export const subscriptions = pgTable("subscriptions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  provider: varchar("provider", { length: 64 }).notNull(),
+  providerSubscriptionId: varchar("provider_subscription_id", { length: 255 }),
+  plan: varchar("plan", { length: 64 }).notNull(),
+  status: varchar("status", { length: 32 }).notNull(),
+  currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  createdAt,
+  updatedAt,
+}, (table) => [
+  uniqueIndex("subscriptions_provider_subscription_unique").on(table.provider, table.providerSubscriptionId),
+  index("subscriptions_user_status_index").on(table.userId, table.status),
+]);
+
+/** No signal generator is enabled. This table records a future, auditable signal lifecycle. */
+export const signals = pgTable("signals", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  symbol: varchar("symbol", { length: 32 }).notNull(),
+  timeframe: varchar("timeframe", { length: 16 }).notNull(),
+  direction: varchar("direction", { length: 16 }).notNull(),
+  entryPrice: numeric("entry_price", { precision: 20, scale: 8 }),
+  stopLoss: numeric("stop_loss", { precision: 20, scale: 8 }),
+  takeProfit: numeric("take_profit", { precision: 20, scale: 8 }),
+  riskRewardRatio: numeric("risk_reward_ratio", { precision: 12, scale: 4 }),
+  status: varchar("status", { length: 16 }).notNull(),
+  openedAt: timestamp("opened_at", { withTimezone: true }),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  returnPct: numeric("return_pct", { precision: 12, scale: 6 }),
+  result: varchar("result", { length: 16 }),
+  strategyVersion: varchar("strategy_version", { length: 64 }),
+  indicatorSnapshot: jsonb("indicator_snapshot"),
+  createdAt,
+}, (table) => [
+  index("signals_status_created_index").on(table.status, table.createdAt),
+  index("signals_symbol_timeframe_index").on(table.symbol, table.timeframe),
+]);
+
+export const accessPlans = {
+  foundersLifetime: "FOUNDERS_LIFETIME",
+  monthlyPro: "MONTHLY_PRO",
+} as const;
+
+export const accessGrantStatuses = {
+  pending: "pending",
+  active: "active",
+  revoked: "revoked",
+  expired: "expired",
+} as const;
+
+export const accessTypes = {
+  adminManual: "ADMIN_MANUAL",
+  payment: "PAYMENT",
+  promotion: "PROMOTION",
+} as const;
+
+export const auditActions = {
+  userRegistered: "USER_REGISTERED",
+  userLogin: "USER_LOGIN",
+  userLogout: "USER_LOGOUT",
+  userBlocked: "USER_BLOCKED",
+  userUnblocked: "USER_UNBLOCKED",
+  accessGranted: "ACCESS_GRANTED",
+  accessRevoked: "ACCESS_REVOKED",
+  accessRestored: "ACCESS_RESTORED",
+  roleChanged: "ROLE_CHANGED",
+} as const;
+
+export type AccessPlan = (typeof accessPlans)[keyof typeof accessPlans];
+export type AccessGrantStatus = (typeof accessGrantStatuses)[keyof typeof accessGrantStatuses];
+export type AccessType = (typeof accessTypes)[keyof typeof accessTypes];
+export type AuditAction = (typeof auditActions)[keyof typeof auditActions];

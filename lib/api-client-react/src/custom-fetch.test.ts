@@ -11,8 +11,10 @@ after(() => {
 
 test("customFetch applies a configured absolute API base URL", async () => {
   let requestedUrl = "";
-  globalThis.fetch = (async (input) => {
+  let credentials: RequestCredentials | undefined;
+  globalThis.fetch = (async (input, init) => {
     requestedUrl = typeof input === "string" ? input : input.toString();
+    credentials = init?.credentials;
     return new Response(JSON.stringify({ status: "ok" }), {
       headers: { "content-type": "application/json" },
     });
@@ -24,7 +26,19 @@ test("customFetch applies a configured absolute API base URL", async () => {
   });
 
   assert.equal(requestedUrl, "https://api.example.test/api/healthz");
+  assert.equal(credentials, "include");
   assert.deepEqual(data, { status: "ok" });
+});
+
+test("customFetch preserves an explicit credential mode", async () => {
+  let credentials: RequestCredentials | undefined;
+  globalThis.fetch = (async (_input, init) => {
+    credentials = init?.credentials;
+    return new Response(JSON.stringify({ status: "ok" }), { headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+
+  await customFetch("/api/healthz", { credentials: "omit", responseType: "json" });
+  assert.equal(credentials, "omit");
 });
 
 test("setBaseUrl rejects relative URLs and credentials", () => {

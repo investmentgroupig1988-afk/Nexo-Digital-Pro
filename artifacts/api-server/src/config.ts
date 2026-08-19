@@ -75,6 +75,18 @@ function parseOrigins(): ReadonlySet<string> {
   );
 }
 
+function parseCookieSameSite(): "lax" | "strict" | "none" {
+  const value = process.env.AUTH_COOKIE_SAME_SITE?.trim().toLowerCase() ?? "lax";
+  if (value === "lax" || value === "strict" || value === "none") return value;
+  throw new Error("AUTH_COOKIE_SAME_SITE must be lax, strict, or none.");
+}
+
+function parseOptionalUrl(name: string): string | undefined {
+  const value = process.env[name]?.trim();
+  if (!value) return undefined;
+  return normalizeOrigin(value, name);
+}
+
 export const config = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: parsePositiveInteger("PORT", 5000),
@@ -88,4 +100,11 @@ export const config = {
   ),
   rateLimitMax: parsePositiveInteger("RATE_LIMIT_MAX", 120),
   rateLimitWindowMs: 60_000,
+  databaseUrl: process.env.DATABASE_URL?.trim() || undefined,
+  betterAuthSecret: process.env.BETTER_AUTH_SECRET?.trim() || undefined,
+  betterAuthUrl: parseOptionalUrl("BETTER_AUTH_URL"),
+  authCookieDomain: process.env.AUTH_COOKIE_DOMAIN?.trim() || undefined,
+  authCookieSameSite: parseCookieSameSite(),
+  authRateLimitMax: parsePositiveInteger("AUTH_RATE_LIMIT_MAX", 10),
+  authRateLimitWindowMs: 15 * 60_000,
 } as const;

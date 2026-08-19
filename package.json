@@ -13,6 +13,9 @@
     "typecheck": "node ./scripts/typecheck.mjs",
     "test": "node ./scripts/test.mjs",
     "build": "node ./scripts/build.mjs",
+    "db:generate": "node ./scripts/db-generate.mjs",
+    "db:migrate": "node ./scripts/db-migrate.mjs",
+    "admin:bootstrap": "node ./scripts/admin-bootstrap.mjs",
     "smoke:api": "node ./scripts/smoke-api.mjs"
   },
   "devDependencies": {

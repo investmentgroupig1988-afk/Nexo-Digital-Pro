@@ -6,15 +6,15 @@ type RateLimitBucket = { count: number; resetAt: number };
 
 const buckets = new Map<string, RateLimitBucket>();
 
-function pruneExpiredBuckets(now: number): void {
-  if (buckets.size < 1_000) return;
-  for (const [key, bucket] of buckets) {
-    if (bucket.resetAt <= now) buckets.delete(key);
+function pruneExpiredBuckets(bucketMap: Map<string, RateLimitBucket>, now: number): void {
+  if (bucketMap.size < 1_000) return;
+  for (const [key, bucket] of bucketMap) {
+    if (bucket.resetAt <= now) bucketMap.delete(key);
   }
 }
 
 export const corsMiddleware = cors({
-  credentials: false,
+  credentials: true,
   origin(origin, callback) {
     // Requests without Origin are non-browser, same-origin, or health probes.
     if (!origin || config.corsOrigins.has(origin)) {
@@ -26,7 +26,7 @@ export const corsMiddleware = cors({
     // blocks the response while API clients still receive the normal response.
     callback(null, false);
   },
-  methods: ["GET", "HEAD", "OPTIONS"],
+  methods: ["GET", "HEAD", "OPTIONS", "POST", "PATCH", "PUT", "DELETE"],
   maxAge: 600,
 });
 
@@ -60,7 +60,7 @@ export function publicApiRateLimit(
 
   bucket.count += 1;
   buckets.set(key, bucket);
-  pruneExpiredBuckets(now);
+  pruneExpiredBuckets(buckets, now);
 
   const remaining = Math.max(0, config.rateLimitMax - bucket.count);
   res.setHeader("RateLimit-Limit", String(config.rateLimitMax));
@@ -74,4 +74,61 @@ export function publicApiRateLimit(
   }
 
   next();
+}
+
+const authBuckets = new Map<string, RateLimitBucket>();
+
+export function authRateLimit(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  const now = Date.now();
+  const key = req.ip || "unknown";
+  const existing = authBuckets.get(key);
+  const bucket = existing && existing.resetAt > now
+    ? existing
+    : { count: 0, resetAt: now + config.authRateLimitWindowMs };
+
+  bucket.count += 1;
+  authBuckets.set(key, bucket);
+  pruneExpiredBuckets(authBuckets, now);
+
+  if (bucket.count > config.authRateLimitMax) {
+    res.setHeader("Retry-After", String(Math.ceil((bucket.resetAt - now) / 1_000)));
+    res.status(429).json({ error: "Too many authentication attempts. Please retry later." });
+    return;
+  }
+
+  next();
+}
+
+/**
+ * State-changing cookie requests must originate from this API or an explicitly
+ * configured browser origin. Better Auth performs its own origin validation;
+ * this also protects Nexo's custom account/admin endpoints.
+ */
+export function trustedMutationOrigin(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+    next();
+    return;
+  }
+
+  const origin = req.get("origin");
+  if (!origin) {
+    next();
+    return;
+  }
+
+  const requestOrigin = `${req.protocol}://${req.get("host")}`;
+  if (origin === requestOrigin || config.corsOrigins.has(origin)) {
+    next();
+    return;
+  }
+
+  res.status(403).json({ error: "Untrusted request origin." });
 }

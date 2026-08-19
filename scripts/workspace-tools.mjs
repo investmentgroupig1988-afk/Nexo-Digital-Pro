@@ -22,7 +22,16 @@ export function run(command, args, { cwd = projectRoot } = {}) {
 
 export async function resolvePackageBin(packageName, binaryName, workspaceDir) {
   const requireFromWorkspace = createRequire(resolve(workspaceDir, "package.json"));
-  const manifestPath = requireFromWorkspace.resolve(`${packageName}/package.json`);
+  let manifestPath;
+  try {
+    manifestPath = requireFromWorkspace.resolve(`${packageName}/package.json`);
+  } catch (error) {
+    // Some CLIs (including Drizzle Kit) intentionally do not export their
+    // package.json. Their main entry is still exportable, so locate the
+    // manifest beside it instead of depending on an unsupported subpath.
+    if (error?.code !== "ERR_PACKAGE_PATH_NOT_EXPORTED") throw error;
+    manifestPath = resolve(dirname(requireFromWorkspace.resolve(packageName)), "package.json");
+  }
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
   const bin = typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.[binaryName];
 

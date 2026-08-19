@@ -381,7 +381,15 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  // Browser sessions use HttpOnly cookies. `include` is needed when the Vite
+  // app is hosted separately from the API; callers can still opt out by
+  // explicitly supplying RequestInit.credentials.
+  const response = await fetch(input, {
+    ...init,
+    credentials: init.credentials ?? "include",
+    method,
+    headers,
+  });
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);

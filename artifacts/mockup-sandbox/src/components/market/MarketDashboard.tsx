@@ -107,7 +107,13 @@ function ErrorBlock({ message, onRetry }: { message: string; onRetry: () => void
   );
 }
 
-export function MarketDashboard() {
+type MarketDashboardProps = {
+  onAccount?: () => void;
+  onAdmin?: () => void;
+  onLogout?: () => void;
+};
+
+export function MarketDashboard({ onAccount, onAdmin, onLogout }: MarketDashboardProps) {
   const [symbol, setSymbol] = useState<MarketSymbol>("BTCUSDT");
   const [timeframe, setTimeframe] = useState<MarketTimeframe>("15m");
   const { health, market, indicators } = useMarketDashboard(symbol, timeframe);
@@ -133,13 +139,15 @@ export function MarketDashboard() {
             <nav aria-label="Navegación principal" className="order-3 flex gap-1 overflow-x-auto pb-1 lg:order-none lg:pb-0">
               <span aria-current="page" className="shrink-0 rounded-lg bg-violet-400/15 px-3 py-2 text-sm font-semibold text-violet-100">Dashboard</span>
               <span aria-disabled="true" className="shrink-0 cursor-not-allowed rounded-lg px-3 py-2 text-sm text-slate-600" title="Disponible en una fase futura">Historial</span>
-              <span aria-disabled="true" className="shrink-0 cursor-not-allowed rounded-lg px-3 py-2 text-sm text-slate-600" title="Disponible en una fase futura">Cuenta</span>
+              {onAccount ? <button className="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/6 hover:text-white" onClick={onAccount} type="button">Cuenta</button> : <span aria-disabled="true" className="shrink-0 cursor-not-allowed rounded-lg px-3 py-2 text-sm text-slate-600">Cuenta</span>}
+              {onAdmin ? <button className="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-violet-200 transition hover:bg-violet-300/10" onClick={onAdmin} type="button">Admin</button> : null}
             </nav>
 
             <div className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${statusClass(connectionTone)}`}>
               <span className="h-1.5 w-1.5 rounded-full bg-current" />
               {connectionLabel}
             </div>
+            {onLogout ? <button className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:bg-white/6" onClick={onLogout} type="button">Cerrar sesión</button> : null}
           </div>
         </header>
 
