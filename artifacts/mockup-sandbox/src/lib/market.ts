@@ -86,15 +86,15 @@ const directionLabels: Record<string, string> = {
 };
 
 export function formatTrend(value: string | null): string {
-  return value ? `${trendLabels[value] ?? value} (${value})` : "No disponible";
+  return value ? (trendLabels[value] ?? value) : "No disponible";
 }
 
 export function formatStructure(value: string | null): string {
-  return value ? `${structureLabels[value] ?? value} (${value})` : "No disponible";
+  return value ? (structureLabels[value] ?? value) : "No disponible";
 }
 
 export function formatDirection(value: string | null): string {
-  return value ? `${directionLabels[value] ?? value} (${value})` : "No disponible";
+  return value ? (directionLabels[value] ?? value) : "No disponible";
 }
 
 export function refreshIntervalFor(timeframe: MarketTimeframe): number {

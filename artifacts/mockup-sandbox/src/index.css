@@ -162,11 +162,15 @@
 }
 
 @layer base {
+  html {
+    background: #070812;
+  }
+
   * {
     @apply border-border;
   }
   body {
-    @apply font-sans antialiased bg-background text-foreground;
+    @apply min-w-[320px] font-sans antialiased bg-background text-foreground;
   }
 }
 

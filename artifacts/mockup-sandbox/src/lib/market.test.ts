@@ -14,10 +14,10 @@ describe("market presentation", () => {
     expect(formatNumber(0)).not.toBe("No disponible");
   });
 
-  it("keeps the original market-structure value visible", () => {
-    expect(formatTrend("bullish")).toBe("Alcista (bullish)");
-    expect(formatStructure("higher_high_and_higher_low")).toBe("HH + HL (higher_high_and_higher_low)");
-    expect(formatDirection("downtrend")).toBe("Bajista (downtrend)");
+  it("translates known market-structure values for the user interface", () => {
+    expect(formatTrend("bullish")).toBe("Alcista");
+    expect(formatStructure("higher_high_and_higher_low")).toBe("HH + HL");
+    expect(formatDirection("downtrend")).toBe("Bajista");
   });
 
   it("uses a bounded refresh interval for every supported timeframe", () => {

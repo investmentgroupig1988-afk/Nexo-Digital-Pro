@@ -1,6 +1,5 @@
-import { useState } from "react";
-import type { HistoricalCandles, TechnicalIndicatorsResponse } from "@workspace/api-client-react";
-import { CandlestickChart } from "@/components/market/CandlestickChart";
+import { useState, type ReactNode } from "react";
+import type { TechnicalIndicatorsResponse } from "@workspace/api-client-react";
 import { useMarketDashboard } from "@/hooks/use-market-dashboard";
 import {
   MARKET_SYMBOLS,
@@ -38,49 +37,60 @@ const INDICATOR_FIELDS = [
 
 const FIBONACCI_LEVELS = ["0.236", "0.382", "0.5", "0.618", "0.786"] as const;
 
-function errorMessage(scope: "market" | "history" | "indicators"): string {
+type StatusTone = "ok" | "pending" | "error" | "warning";
+
+function errorMessage(scope: "market" | "indicators"): string {
   const labels = {
     market: "No se pudo obtener la cotización actual.",
-    history: "No se pudieron obtener las velas históricas.",
-    indicators: "No se pudieron calcular los indicadores técnicos.",
+    indicators: "No se pudo obtener el análisis técnico.",
   } as const;
   return `${labels[scope]} Verificá la conexión con la API y reintentá.`;
 }
 
-function statusClass(status: "ok" | "pending" | "error" | "warning"): string {
+function statusClass(status: StatusTone): string {
   return {
-    ok: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
-    pending: "border-amber-500/30 bg-amber-500/10 text-amber-200",
-    error: "border-rose-500/30 bg-rose-500/10 text-rose-200",
-    warning: "border-orange-500/30 bg-orange-500/10 text-orange-200",
+    ok: "border-emerald-400/25 bg-emerald-400/10 text-emerald-200",
+    pending: "border-amber-300/25 bg-amber-300/10 text-amber-100",
+    error: "border-rose-400/25 bg-rose-400/10 text-rose-100",
+    warning: "border-orange-300/25 bg-orange-300/10 text-orange-100",
   }[status];
 }
 
-function currentCandles(data: HistoricalCandles | undefined) {
-  return data?.status === "OK" ? data.candles : [];
+function providerLabel(provider: string | null | undefined): string {
+  const labels: Record<string, string> = {
+    binance: "Binance",
+    twelvedata: "Twelve Data",
+  };
+  return provider ? (labels[provider.toLowerCase()] ?? provider) : "No disponible";
 }
 
-function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <section className={`rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-lg shadow-slate-950/20 ${className}`}>
+    <section className={`rounded-2xl border border-white/8 bg-slate-950/55 p-5 shadow-[0_16px_50px_rgba(0,0,0,0.22)] backdrop-blur-sm sm:p-6 ${className}`}>
       {children}
     </section>
   );
 }
 
-function Metric({ label, value, description }: { label: string; value: string; description?: string }) {
+function Metric({ label, value, description, emphasis = false }: {
+  label: string;
+  value: string;
+  description?: string;
+  emphasis?: boolean;
+}) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-3">
-      <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-slate-100">{value}</p>
-      {description ? <p className="mt-1 text-xs text-slate-500">{description}</p> : null}
+    <div className="min-w-0 rounded-xl border border-white/7 bg-[#090c18]/80 px-3.5 py-3.5">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</p>
+      <p className={`mt-1.5 break-words font-semibold text-slate-100 ${emphasis ? "text-2xl tracking-tight" : "text-sm"}`}>{value}</p>
+      {description ? <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p> : null}
     </div>
   );
 }
 
 function LoadingBlock({ label }: { label: string }) {
   return (
-    <div aria-live="polite" className="flex min-h-40 items-center justify-center rounded-xl border border-slate-800 bg-slate-950/40 text-sm text-slate-400">
+    <div aria-live="polite" className="flex min-h-40 items-center justify-center rounded-xl border border-white/8 bg-[#090c18]/70 text-sm text-slate-400">
+      <span className="mr-3 h-2 w-2 animate-pulse rounded-full bg-violet-300" />
       Cargando {label}…
     </div>
   );
@@ -88,9 +98,9 @@ function LoadingBlock({ label }: { label: string }) {
 
 function ErrorBlock({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div role="alert" className="flex min-h-40 flex-col items-center justify-center gap-3 rounded-xl border border-rose-500/30 bg-rose-500/5 p-5 text-center">
+    <div role="alert" className="flex min-h-40 flex-col items-center justify-center gap-3 rounded-xl border border-rose-400/25 bg-rose-400/5 p-5 text-center">
       <p className="max-w-md text-sm text-rose-100">{message}</p>
-      <button className="rounded-lg border border-rose-300/40 px-3 py-1.5 text-sm font-medium text-rose-100 hover:bg-rose-500/15" onClick={onRetry} type="button">
+      <button className="rounded-lg border border-rose-200/35 px-3 py-1.5 text-sm font-medium text-rose-100 transition hover:bg-rose-400/15 focus:outline-none focus:ring-2 focus:ring-rose-300" onClick={onRetry} type="button">
         Reintentar
       </button>
     </div>
@@ -100,33 +110,51 @@ function ErrorBlock({ message, onRetry }: { message: string; onRetry: () => void
 export function MarketDashboard() {
   const [symbol, setSymbol] = useState<MarketSymbol>("BTCUSDT");
   const [timeframe, setTimeframe] = useState<MarketTimeframe>("15m");
-  const { health, market, candles, indicators } = useMarketDashboard(symbol, timeframe);
+  const { health, market, indicators } = useMarketDashboard(symbol, timeframe);
   const technical = indicators.data;
 
+  const connectionTone: StatusTone = health.isSuccess ? "ok" : health.isError ? "error" : "pending";
+  const connectionLabel = health.isSuccess ? "Sistema activo · API conectada" : health.isError ? "API sin conexión" : "Verificando sistema";
+
   return (
-    <main className="min-h-screen bg-[#07111f] text-slate-100">
-      <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        <header className="mb-6 flex flex-col gap-5 border-b border-slate-800 pb-6 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-300">Nexo Digital Pro</p>
-            <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">Panel de análisis de mercado</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-              Datos de mercado y análisis técnico informativo. No genera recomendaciones operativas ni ejecuta órdenes.
-            </p>
-          </div>
-          <div className={`inline-flex items-center gap-2 self-start rounded-full border px-3 py-1.5 text-sm font-medium ${health.isSuccess ? statusClass("ok") : health.isError ? statusClass("error") : statusClass("pending")}`}>
-            <span className="h-2 w-2 rounded-full bg-current" />
-            {health.isSuccess ? "API conectada" : health.isError ? "API sin conexión" : "Conectando con la API"}
+    <main className="min-h-screen overflow-x-hidden bg-[#070812] text-slate-100">
+      <div aria-hidden="true" className="pointer-events-none fixed inset-x-0 top-0 h-[32rem] bg-[radial-gradient(ellipse_at_top,rgba(124,58,237,0.2),transparent_62%)]" />
+      <div className="relative mx-auto max-w-[1440px] px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <header className="mb-6 rounded-2xl border border-white/8 bg-[#0b0d1b]/85 px-4 py-4 shadow-[0_18px_50px_rgba(0,0,0,0.24)] backdrop-blur-md sm:px-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              <div aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-violet-300/30 bg-violet-500/15 text-lg font-bold text-violet-100 shadow-[0_0_28px_rgba(139,92,246,0.26)]">N</div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-bold tracking-[0.18em] text-white">NEXO DIGITAL PRO</p>
+                <p className="mt-0.5 text-xs text-slate-500">Inteligencia de mercado</p>
+              </div>
+            </div>
+
+            <nav aria-label="Navegación principal" className="order-3 flex gap-1 overflow-x-auto pb-1 lg:order-none lg:pb-0">
+              <span aria-current="page" className="shrink-0 rounded-lg bg-violet-400/15 px-3 py-2 text-sm font-semibold text-violet-100">Dashboard</span>
+              <span aria-disabled="true" className="shrink-0 cursor-not-allowed rounded-lg px-3 py-2 text-sm text-slate-600" title="Disponible en una fase futura">Historial</span>
+              <span aria-disabled="true" className="shrink-0 cursor-not-allowed rounded-lg px-3 py-2 text-sm text-slate-600" title="Disponible en una fase futura">Cuenta</span>
+            </nav>
+
+            <div className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${statusClass(connectionTone)}`}>
+              <span className="h-1.5 w-1.5 rounded-full bg-current" />
+              {connectionLabel}
+            </div>
           </div>
         </header>
 
-        <Card className="mb-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="grid gap-4 sm:grid-cols-2">
+        <section className="mb-6 overflow-hidden rounded-2xl border border-violet-300/15 bg-gradient-to-br from-violet-500/15 via-[#101326] to-[#0b0d1b] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.2)] sm:p-7">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-200">Visión de mercado</p>
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white sm:text-4xl">Análisis de mercado</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">Una lectura clara de los datos técnicos disponibles para el activo y período seleccionados.</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
               <label className="grid gap-2 text-sm font-medium text-slate-300" htmlFor="market-symbol">
-                Activo
+                Mercado
                 <select
-                  className="min-w-48 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-base text-white outline-none ring-cyan-400 transition focus:ring-2"
+                  className="min-w-44 rounded-xl border border-white/10 bg-[#090c18]/90 px-3 py-2.5 text-base text-white outline-none transition focus:border-violet-300/70 focus:ring-2 focus:ring-violet-400/30"
                   id="market-symbol"
                   onChange={(event) => {
                     if (isMarketSymbol(event.target.value)) setSymbol(event.target.value);
@@ -137,9 +165,9 @@ export function MarketDashboard() {
                 </select>
               </label>
               <label className="grid gap-2 text-sm font-medium text-slate-300" htmlFor="market-timeframe">
-                Timeframe
+                Período
                 <select
-                  className="min-w-48 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-base text-white outline-none ring-cyan-400 transition focus:ring-2"
+                  className="min-w-36 rounded-xl border border-white/10 bg-[#090c18]/90 px-3 py-2.5 text-base text-white outline-none transition focus:border-violet-300/70 focus:ring-2 focus:ring-violet-400/30"
                   id="market-timeframe"
                   onChange={(event) => {
                     if (isMarketTimeframe(event.target.value)) setTimeframe(event.target.value);
@@ -150,56 +178,39 @@ export function MarketDashboard() {
                 </select>
               </label>
             </div>
-            <p className="text-sm text-slate-400">
-              Vista actual: <span className="font-semibold text-slate-100">{symbol} · {timeframe}</span>
-            </p>
           </div>
-        </Card>
+        </section>
 
-        <section aria-label="Cotización actual" className="mb-6">
-          {market.isPending ? <LoadingBlock label={`la cotización de ${symbol}`} /> : null}
+        <section aria-label="Resumen de mercado" className="mb-6">
+          {market.isPending ? <LoadingBlock label={`el resumen de ${symbol}`} /> : null}
           {market.isError ? <ErrorBlock message={errorMessage("market")} onRetry={() => void market.refetch()} /> : null}
           {market.data ? (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-              <Metric label={`Precio actual · ${market.data.symbol}`} value={formatPrice(market.data.price, symbol)} />
-              <Metric label="Proveedor" value={market.data.provider} />
-              <Metric label="Actualizado" value={formatTimestamp(market.data.updatedAt)} />
-              <Metric label="Moneda" value={market.data.currency} />
-              <Metric label="Unidad" value={market.data.unit === "troy_ounce" ? "Onza troy" : "Activo base"} />
+              <Metric emphasis label="Precio actual" value={formatPrice(market.data.price, symbol)} description={market.data.symbol} />
+              <Metric label="Activo" value={market.data.symbol} description={market.data.assetClass === "gold" ? "Oro" : "Criptoactivo"} />
+              <Metric label="Timeframe" value={timeframe} description="Período de análisis" />
+              <Metric label="Fuente de mercado" value={providerLabel(market.data.provider)} description={formatTimestamp(market.data.updatedAt)} />
+              <Metric label="Estado de datos" value="Disponible" description={market.data.unit === "troy_ounce" ? "Por onza troy" : "Cotización de mercado"} />
             </div>
           ) : null}
         </section>
 
-        <section className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(310px,0.8fr)]">
-          <Card>
-            <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-white">Velas OHLCV reales</h2>
-                <p className="mt-1 text-sm text-slate-400">{symbol} · {timeframe} · hasta 200 velas</p>
-              </div>
-              {candles.data?.status === "OK" ? <span className={`rounded-full border px-3 py-1 text-xs font-medium ${statusClass("ok")}`}>Proveedor: {candles.data.provider}</span> : null}
-            </div>
-            {candles.isPending ? <LoadingBlock label={`las velas de ${symbol} en ${timeframe}`} /> : null}
-            {candles.isError ? <ErrorBlock message={errorMessage("history")} onRetry={() => void candles.refetch()} /> : null}
-            {candles.data?.status === "UNAVAILABLE" ? (
-              <div role="status" className="rounded-xl border border-orange-500/30 bg-orange-500/5 p-5">
-                <p className="font-semibold text-orange-100">Velas no disponibles</p>
-                <p className="mt-1 text-sm text-orange-100/80">{candles.data.message}</p>
-              </div>
-            ) : null}
-            {candles.data?.status === "OK" ? <CandlestickChart candles={currentCandles(candles.data)} symbol={symbol} timeframe={timeframe} /> : null}
-          </Card>
-
+        <section className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.8fr)]">
+          <IndicatorsCard data={technical} isError={indicators.isError} isPending={indicators.isPending} onRetry={() => void indicators.refetch()} />
           <div className="space-y-6">
-            <IndicatorsCard data={technical} isError={indicators.isError} isPending={indicators.isPending} onRetry={() => void indicators.refetch()} />
-            <DataQualityCard data={technical} />
+            <StructureCard data={technical} />
+            <AnalysisStatusCard data={technical} />
           </div>
         </section>
 
-        <section className="mt-6 grid gap-6 lg:grid-cols-2">
+        <section className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.8fr)]">
           <FibonacciCard data={technical} />
-          <StructureCard data={technical} />
+          <DataDetailsCard data={technical} marketProvider={market.data?.provider} />
         </section>
+
+        <footer className="mt-8 border-t border-white/8 py-6 text-center text-xs leading-5 text-slate-500">
+          Nexo Digital Pro proporciona análisis técnico e información de mercado. No constituye asesoramiento financiero ni ejecuta operaciones.
+        </footer>
       </div>
     </main>
   );
@@ -214,14 +225,20 @@ function IndicatorsCard({ data, isPending, isError, onRetry }: {
   const values = asRecord(data?.indicators);
   return (
     <Card>
-      <h2 className="text-lg font-semibold text-white">Indicadores técnicos</h2>
-      <p className="mt-1 text-sm text-slate-400">Calculados por la API para el activo y timeframe actuales.</p>
-      {isPending ? <div className="mt-4"><LoadingBlock label="los indicadores" /></div> : null}
-      {isError ? <div className="mt-4"><ErrorBlock message={errorMessage("indicators")} onRetry={onRetry} /></div> : null}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-violet-200">Lectura técnica</p>
+          <h2 className="mt-1 text-xl font-semibold text-white">Indicadores clave</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-400">Calculados por la API a partir de datos históricos reales.</p>
+        </div>
+        {data ? <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusClass(data.status === "OK" ? "ok" : data.status === "UNAVAILABLE" ? "error" : "warning")}`}>{data.status === "OK" ? "Análisis disponible" : "Requiere atención"}</span> : null}
+      </div>
+      {isPending ? <div className="mt-5"><LoadingBlock label="los indicadores" /></div> : null}
+      {isError ? <div className="mt-5"><ErrorBlock message={errorMessage("indicators")} onRetry={onRetry} /></div> : null}
       {data?.status === "UNAVAILABLE" ? <UnavailableMessage message={data.message} /> : null}
       {data?.status === "INSUFFICIENT_DATA" ? <InsufficientMessage message={data.message} /> : null}
       {data ? (
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="mt-5 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
           {INDICATOR_FIELDS.map(([label, key]) => <Metric key={key} label={label} value={formatNumber(recordNumber(values, key))} />)}
         </div>
       ) : null}
@@ -229,33 +246,22 @@ function IndicatorsCard({ data, isPending, isError, onRetry }: {
   );
 }
 
-function DataQualityCard({ data }: { data: TechnicalIndicatorsResponse | undefined }) {
+function AnalysisStatusCard({ data }: { data: TechnicalIndicatorsResponse | undefined }) {
   const quality = asRecord(data?.dataQuality);
   const sufficient = recordBoolean(quality, "sufficient");
-  const reason = recordString(quality, "reason") ?? data?.message ?? "No disponible";
-  const qualityStatus = sufficient === true ? "ok" : data?.status === "UNAVAILABLE" ? "error" : "warning";
+  const tone: StatusTone = sufficient === true ? "ok" : data?.status === "UNAVAILABLE" ? "error" : "warning";
+  const label = data?.status === "UNAVAILABLE" ? "Datos no disponibles temporalmente" : data?.status === "INSUFFICIENT_DATA" ? "Datos históricos insuficientes" : sufficient === true ? "Datos suficientes para el análisis" : "Esperando datos de análisis";
 
   return (
     <Card>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-white">Calidad de datos</h2>
-          <p className="mt-1 text-sm text-slate-400">Estado informado por la API.</p>
-        </div>
-        <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusClass(qualityStatus)}`}>
-          {sufficient === true ? "Suficiente" : "Requiere atención"}
-        </span>
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Estado del análisis</p>
+      <div className={`mt-3 rounded-xl border p-4 ${statusClass(tone)}`}>
+        <p className="font-semibold">{label}</p>
+        <p className="mt-1 text-sm opacity-85">{data?.message ?? (sufficient === true ? "Los indicadores están disponibles para la selección actual." : "La API aún no informó una cobertura suficiente.")}</p>
       </div>
-      {data?.status === "INSUFFICIENT_DATA" ? <InsufficientMessage message={data.message} /> : null}
-      <dl className="mt-4 grid gap-3 sm:grid-cols-2">
-        <Metric label="sufficient" value={formatBoolean(sufficient)} />
-        <Metric label="candleCount" value={formatNumber(recordNumber(quality, "candleCount"), { maximumFractionDigits: 0 })} />
-        <Metric label="volumeAvailable" value={formatBoolean(recordBoolean(quality, "volumeAvailable"))} />
-        <Metric label="provider" value={recordString(quality, "provider") ?? "No disponible"} />
-      </dl>
-      <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/50 p-3">
-        <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">reason</p>
-        <p className="mt-1 text-sm text-slate-300">{reason}</p>
+      <div className="mt-4 grid grid-cols-2 gap-2.5">
+        <Metric label="Velas analizadas" value={formatNumber(data?.candlesUsed, { maximumFractionDigits: 0 })} />
+        <Metric label="Actualización" value={formatTimestamp(data?.timestamp)} />
       </div>
     </Card>
   );
@@ -266,15 +272,18 @@ function FibonacciCard({ data }: { data: TechnicalIndicatorsResponse | undefined
   const levels = asRecord(fibonacci?.levels);
   return (
     <Card>
-      <h2 className="text-lg font-semibold text-white">Fibonacci</h2>
-      <p className="mt-1 text-sm text-slate-400">Valores calculados por el backend sobre las velas recibidas.</p>
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        <Metric label="swingHigh" value={formatNumber(recordNumber(fibonacci, "swingHigh"))} />
-        <Metric label="swingLow" value={formatNumber(recordNumber(fibonacci, "swingLow"))} />
-        <Metric label="direction" value={formatDirection(recordString(fibonacci, "direction"))} />
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-violet-200">Niveles técnicos</p>
+        <h2 className="mt-1 text-xl font-semibold text-white">Fibonacci</h2>
+        <p className="mt-1 text-sm leading-6 text-slate-400">Niveles calculados por el backend sobre el tramo disponible.</p>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
-        {FIBONACCI_LEVELS.map((level) => <Metric key={level} label={level} value={formatNumber(recordNumber(levels, level))} />)}
+      <div className="mt-5 grid gap-2.5 sm:grid-cols-3">
+        <Metric label="Máximo del swing" value={formatNumber(recordNumber(fibonacci, "swingHigh"))} />
+        <Metric label="Mínimo del swing" value={formatNumber(recordNumber(fibonacci, "swingLow"))} />
+        <Metric label="Dirección" value={formatDirection(recordString(fibonacci, "direction"))} />
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-5">
+        {FIBONACCI_LEVELS.map((level) => <Metric key={level} label={`Nivel ${level}`} value={formatNumber(recordNumber(levels, level))} />)}
       </div>
     </Card>
   );
@@ -284,25 +293,60 @@ function StructureCard({ data }: { data: TechnicalIndicatorsResponse | undefined
   const structure = asRecord(data?.marketStructure);
   return (
     <Card>
-      <h2 className="text-lg font-semibold text-white">Estructura de mercado</h2>
-      <p className="mt-1 text-sm text-slate-400">Presentación legible y valores originales entre paréntesis cuando existen.</p>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <Metric label="trend" value={formatTrend(recordString(structure, "trend"))} />
-        <Metric label="structure" value={formatStructure(recordString(structure, "structure"))} />
-        <Metric label="higherHigh" value={formatBoolean(recordBoolean(structure, "higherHigh"))} />
-        <Metric label="higherLow" value={formatBoolean(recordBoolean(structure, "higherLow"))} />
-        <Metric label="lowerHigh" value={formatBoolean(recordBoolean(structure, "lowerHigh"))} />
-        <Metric label="lowerLow" value={formatBoolean(recordBoolean(structure, "lowerLow"))} />
-        <Metric label="support" value={formatNumber(recordNumber(structure, "support"))} />
-        <Metric label="resistance" value={formatNumber(recordNumber(structure, "resistance"))} />
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-violet-200">Contexto técnico</p>
+      <h2 className="mt-1 text-xl font-semibold text-white">Estructura de mercado</h2>
+      <div className="mt-5 grid gap-2.5 sm:grid-cols-2">
+        <Metric label="Tendencia" value={formatTrend(recordString(structure, "trend"))} />
+        <Metric label="Estructura" value={formatStructure(recordString(structure, "structure"))} />
+        <Metric label="Máximo creciente" value={formatBoolean(recordBoolean(structure, "higherHigh"))} />
+        <Metric label="Mínimo creciente" value={formatBoolean(recordBoolean(structure, "higherLow"))} />
+        <Metric label="Máximo decreciente" value={formatBoolean(recordBoolean(structure, "lowerHigh"))} />
+        <Metric label="Mínimo decreciente" value={formatBoolean(recordBoolean(structure, "lowerLow"))} />
+        <Metric label="Soporte" value={formatNumber(recordNumber(structure, "support"))} />
+        <Metric label="Resistencia" value={formatNumber(recordNumber(structure, "resistance"))} />
       </div>
+    </Card>
+  );
+}
+
+function DataDetailsCard({ data, marketProvider }: { data: TechnicalIndicatorsResponse | undefined; marketProvider: string | undefined }) {
+  const quality = asRecord(data?.dataQuality);
+  const structure = asRecord(data?.marketStructure);
+  const fibonacci = asRecord(data?.fibonacci);
+  const reason = recordString(quality, "reason") ?? data?.message ?? "No disponible";
+  return (
+    <Card className="self-start">
+      <details>
+        <summary className="cursor-pointer list-none rounded-lg text-sm font-semibold text-slate-200 outline-none transition hover:text-white focus-visible:ring-2 focus-visible:ring-violet-300 [&::-webkit-details-marker]:hidden">
+          <span className="flex items-center justify-between gap-3">
+            Detalles de datos
+            <span aria-hidden="true" className="text-violet-200">+</span>
+          </span>
+        </summary>
+        <div className="mt-5 space-y-4">
+          <p className="text-sm leading-6 text-slate-400">Cobertura, procedencia y referencia informadas por la API. Esta información complementa el análisis principal.</p>
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            <Metric label="Proveedor" value={providerLabel(recordString(quality, "provider") ?? marketProvider)} />
+            <Metric label="Velas disponibles" value={formatNumber(recordNumber(quality, "candleCount"), { maximumFractionDigits: 0 })} />
+            <Metric label="Cobertura suficiente" value={formatBoolean(recordBoolean(quality, "sufficient"))} />
+            <Metric label="Volumen disponible" value={formatBoolean(recordBoolean(quality, "volumeAvailable"))} />
+          </div>
+          <div className="rounded-xl border border-white/7 bg-[#090c18]/80 p-3.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Motivo informado</p>
+            <p className="mt-1.5 text-sm leading-6 text-slate-300">{reason}</p>
+          </div>
+          <div className="rounded-xl border border-white/7 bg-[#090c18]/80 p-3.5 text-xs leading-5 text-slate-500">
+            Referencia de la fuente: tendencia {recordString(structure, "trend") ?? "No disponible"} · estructura {recordString(structure, "structure") ?? "No disponible"} · dirección {recordString(fibonacci, "direction") ?? "No disponible"} · estado {data?.status ?? "No disponible"}
+          </div>
+        </div>
+      </details>
     </Card>
   );
 }
 
 function InsufficientMessage({ message }: { message: string | null }) {
   return (
-    <div role="status" className="mt-4 rounded-xl border border-orange-500/30 bg-orange-500/5 p-3 text-sm text-orange-100">
+    <div role="status" className="mt-5 rounded-xl border border-orange-300/25 bg-orange-300/8 p-3.5 text-sm text-orange-100">
       <span className="font-semibold">Datos históricos insuficientes. </span>
       {message ?? "La API no informó un motivo adicional."}
     </div>
@@ -311,8 +355,8 @@ function InsufficientMessage({ message }: { message: string | null }) {
 
 function UnavailableMessage({ message }: { message: string | null }) {
   return (
-    <div role="status" className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/5 p-3 text-sm text-rose-100">
-      <span className="font-semibold">Datos no disponibles. </span>
+    <div role="status" className="mt-5 rounded-xl border border-rose-400/25 bg-rose-400/8 p-3.5 text-sm text-rose-100">
+      <span className="font-semibold">Datos no disponibles temporalmente. </span>
       {message ?? "La API no informó un motivo adicional."}
     </div>
   );

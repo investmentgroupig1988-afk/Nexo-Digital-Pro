@@ -16,14 +16,16 @@ import { MarketDashboard } from "./MarketDashboard";
 import { configureApiClient } from "@/lib/api";
 
 function indicators(status: "OK" | "INSUFFICIENT_DATA" | "UNAVAILABLE" = "OK") {
+  const unavailable = status === "UNAVAILABLE";
+  const insufficient = status === "INSUFFICIENT_DATA";
   return {
     status,
-    message: status === "INSUFFICIENT_DATA" ? "At least 200 real candles are required." : null,
+    message: insufficient ? "At least 200 real candles are required." : unavailable ? "The market data provider is temporarily unavailable." : null,
     symbol: "BTCUSDT",
     timeframe: "15m",
     timestamp: "2026-01-01T00:00:00.000Z",
     price: 95_000,
-    candlesUsed: status === "INSUFFICIENT_DATA" ? 10 : 200,
+    candlesUsed: insufficient ? 10 : unavailable ? 0 : 200,
     indicators: {
       ema20: null,
       ema50: 94_000,
@@ -44,37 +46,22 @@ function indicators(status: "OK" | "INSUFFICIENT_DATA" | "UNAVAILABLE" = "OK") {
       levels: { "0.236": null, "0.382": null, "0.5": null, "0.618": null, "0.786": null },
     },
     marketStructure: {
-      trend: null,
-      structure: null,
-      higherHigh: null,
-      higherLow: null,
-      lowerHigh: null,
-      lowerLow: null,
-      support: null,
-      resistance: null,
+      trend: "bullish",
+      structure: "higher_high_and_higher_low",
+      higherHigh: true,
+      higherLow: true,
+      lowerHigh: false,
+      lowerLow: false,
+      support: 91_000,
+      resistance: 97_000,
     },
     dataQuality: {
       sufficient: status === "OK",
-      candleCount: status === "OK" ? 200 : 10,
+      candleCount: status === "OK" ? 200 : insufficient ? 10 : 0,
       volumeAvailable: false,
       provider: "binance",
-      reason: status === "INSUFFICIENT_DATA" ? "At least 200 real candles are required." : "Volume is not available.",
+      reason: insufficient ? "At least 200 real candles are required." : unavailable ? "The market data provider is temporarily unavailable." : "Volume is not available.",
     },
-  };
-}
-
-function candles(symbol = "BTCUSDT", timeframe = "15m") {
-  return {
-    status: "OK",
-    symbol,
-    timeframe,
-    provider: symbol === "XAUUSD" ? "twelvedata" : "binance",
-    candles: [
-      { timestamp: "2026-01-01T00:00:00.000Z", open: 90_000, high: 92_000, low: 89_000, close: 91_000, volume: 22 },
-      { timestamp: "2026-01-01T00:15:00.000Z", open: 91_000, high: 96_000, low: 90_000, close: 95_000, volume: 24 },
-    ],
-    availableTimeframes: ["1m", "5m", "15m", "1h", "4h"],
-    message: null,
   };
 }
 
@@ -100,7 +87,6 @@ function configureSuccessfulApi() {
     assetClass: symbol === "XAUUSD" ? "gold" : "crypto",
     updatedAt: "2026-01-01T00:00:00.000Z",
   }));
-  api.getHistoricalCandles.mockImplementation(({ symbol, timeframe }: { symbol: string; timeframe: string }) => Promise.resolve(candles(symbol, timeframe)));
   api.getTechnicalIndicators.mockResolvedValue(indicators());
 }
 
@@ -112,19 +98,20 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("MarketDashboard", () => {
-  it("renders a loading state while market requests are pending", () => {
+  it("renders loading feedback without a candlestick chart", () => {
     api.healthCheck.mockReturnValue(new Promise(() => undefined));
     api.getMarketData.mockReturnValue(new Promise(() => undefined));
-    api.getHistoricalCandles.mockReturnValue(new Promise(() => undefined));
     api.getTechnicalIndicators.mockReturnValue(new Promise(() => undefined));
 
     renderDashboard();
 
-    expect(screen.getByText("Cargando la cotización de BTCUSDT…")).toBeTruthy();
-    expect(screen.getByText("Cargando las velas de BTCUSDT en 15m…")).toBeTruthy();
+    expect(screen.getByText("Cargando el resumen de BTCUSDT…")).toBeTruthy();
+    expect(screen.getByText("Cargando los indicadores…")).toBeTruthy();
+    expect(screen.queryByRole("img", { name: /gráfico|velas/i })).toBeNull();
+    expect(api.getHistoricalCandles).not.toHaveBeenCalled();
   });
 
-  it("shows a safe error state when the API fails", async () => {
+  it("shows a safe error state when the market API fails", async () => {
     api.getMarketData.mockRejectedValue(new Error("internal provider details"));
 
     renderDashboard();
@@ -133,26 +120,45 @@ describe("MarketDashboard", () => {
     expect(screen.queryByText("internal provider details")).toBeNull();
   });
 
-  it("uses current symbol and timeframe in independent API requests", async () => {
+  it("uses BTCUSDT/XAUUSD and the selected timeframe for real API requests", async () => {
     renderDashboard();
-    await screen.findByText("Proveedor: binance");
+    await screen.findByText("Análisis disponible");
 
-    fireEvent.change(screen.getByLabelText("Activo"), { target: { value: "XAUUSD" } });
+    fireEvent.change(screen.getByLabelText("Mercado"), { target: { value: "XAUUSD" } });
     await waitFor(() => expect(api.getMarketData).toHaveBeenLastCalledWith({ symbol: "XAUUSD" }, expect.anything()));
-    await waitFor(() => expect(api.getHistoricalCandles).toHaveBeenLastCalledWith({ symbol: "XAUUSD", timeframe: "15m", limit: 200 }, expect.anything()));
+    await waitFor(() => expect(api.getTechnicalIndicators).toHaveBeenLastCalledWith({ symbol: "XAUUSD", timeframe: "15m" }, expect.anything()));
 
-    fireEvent.change(screen.getByLabelText("Timeframe"), { target: { value: "1h" } });
-    await waitFor(() => expect(api.getHistoricalCandles).toHaveBeenLastCalledWith({ symbol: "XAUUSD", timeframe: "1h", limit: 200 }, expect.anything()));
+    fireEvent.change(screen.getByLabelText("Período"), { target: { value: "1h" } });
     await waitFor(() => expect(api.getTechnicalIndicators).toHaveBeenLastCalledWith({ symbol: "XAUUSD", timeframe: "1h" }, expect.anything()));
+    expect(api.getHistoricalCandles).not.toHaveBeenCalled();
   });
 
-  it("exposes insufficient historical data and renders null metrics as unavailable", async () => {
+  it("presents real indicator fields, translated structure, and unavailable nulls", async () => {
+    renderDashboard();
+
+    expect(await screen.findByText("EMA 50")).toBeTruthy();
+    expect(screen.getByText("94.000")).toBeTruthy();
+    expect(screen.getByText("Alcista")).toBeTruthy();
+    expect(screen.getByText("HH + HL")).toBeTruthy();
+    expect(screen.getAllByText("No disponible").length).toBeGreaterThan(1);
+    expect(screen.getByText(/No constituye asesoramiento financiero/)).toBeTruthy();
+  });
+
+  it("makes insufficient historical data explicit", async () => {
     api.getTechnicalIndicators.mockResolvedValue(indicators("INSUFFICIENT_DATA"));
 
     renderDashboard();
 
     expect((await screen.findAllByText(/Datos históricos insuficientes/)).length).toBeGreaterThan(0);
     expect(screen.getAllByText("No disponible").length).toBeGreaterThan(1);
+  });
+
+  it("makes a temporarily unavailable analysis explicit", async () => {
+    api.getTechnicalIndicators.mockResolvedValue(indicators("UNAVAILABLE"));
+
+    renderDashboard();
+
+    expect((await screen.findAllByText(/Datos no disponibles temporalmente/)).length).toBeGreaterThan(0);
   });
 
   it("configures a separately hosted API only through the shared client", () => {

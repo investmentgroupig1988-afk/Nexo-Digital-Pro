@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  getHistoricalCandles,
   getMarketData,
   getTechnicalIndicators,
   healthCheck,
@@ -25,14 +24,6 @@ export function useMarketDashboard(symbol: MarketSymbol, timeframe: MarketTimefr
     refetchInterval: 30_000,
   });
 
-  const candles = useQuery({
-    queryKey: ["candles", symbol, timeframe, 200],
-    queryFn: ({ signal }) =>
-      getHistoricalCandles({ symbol, timeframe, limit: 200 }, { signal }),
-    staleTime: Math.min(analysisRefreshInterval, 30_000),
-    refetchInterval: analysisRefreshInterval,
-  });
-
   const indicators = useQuery({
     queryKey: ["indicators", symbol, timeframe],
     queryFn: ({ signal }) => getTechnicalIndicators({ symbol, timeframe }, { signal }),
@@ -40,5 +31,5 @@ export function useMarketDashboard(symbol: MarketSymbol, timeframe: MarketTimefr
     refetchInterval: analysisRefreshInterval,
   });
 
-  return { health, market, candles, indicators };
+  return { health, market, indicators };
 }
