@@ -52,6 +52,7 @@ export const sessions = pgTable("session", {
 export const accounts = pgTable("account", {
   id: text("id").primaryKey(),
   accountId: text("account_id").notNull(),
+  issuer: text("issuer").notNull(),
   providerId: varchar("provider_id", { length: 128 }).notNull(),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   accessToken: text("access_token"),
@@ -65,7 +66,7 @@ export const accounts = pgTable("account", {
   updatedAt,
 }, (table) => [
   index("account_user_id_index").on(table.userId),
-  uniqueIndex("account_provider_account_unique").on(table.providerId, table.accountId),
+  uniqueIndex("account_issuer_account_unique").on(table.issuer, table.accountId),
 ]);
 
 export const verifications = pgTable("verification", {

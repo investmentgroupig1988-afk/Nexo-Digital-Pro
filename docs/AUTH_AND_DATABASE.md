@@ -2,7 +2,7 @@
 
 ## Tablas y relaciones
 
-La migración `lib/db/drizzle/0000_groovy_kat_farrell.sql` crea las tablas de Better Auth `user`, `session`, `account` y `verification`; catálogo `roles`, `permissions` y `role_permissions`; comercial `access_grants` y `audit_logs`; y preparación futura `payments`, `subscriptions` y `signals`.
+La migración `lib/db/drizzle/0000_groovy_kat_farrell.sql` crea las tablas de Better Auth `user`, `session`, `account` y `verification`; catálogo `roles`, `permissions` y `role_permissions`; comercial `access_grants` y `audit_logs`; y preparación futura `payments`, `subscriptions` y `signals`. La migración no destructiva `0001_colorful_stryfe.sql` añade `account.issuer`, normaliza las cuentas credential existentes a `local:credential` y cambia la unicidad al par `(issuer, account_id)`, que es el contrato de Better Auth 1.7.
 
 `session`, `account` y `access_grants` pertenecen a `user`; las referencias de actor/revocación y de auditoría usan `SET NULL` para preservar historial. `payments` y `subscriptions` se restringen a usuarios existentes. El email y el username tienen índices únicos case-insensitive sobre `lower(...)`. La migración incluye los roles `user`/`admin` y los permisos `users.read`, `users.block`, `access.grant`, `access.revoke`, `payments.read`, `plans.manage`, `admins.manage` y `analytics.read`; todos los permisos se asignan a `admin`.
 
@@ -10,7 +10,7 @@ La migración `lib/db/drizzle/0000_groovy_kat_farrell.sql` crea las tablas de Be
 
 ## Seguridad de sesión
 
-Better Auth hashea las contraseñas y emite cookies `HttpOnly`; en producción son `Secure`. `AUTH_COOKIE_SAME_SITE` acepta `lax`, `strict` o `none`, y las mutaciones validan el origin configurado. `CORS_ALLOWED_ORIGINS` es una lista exacta, sin comodines. El límite de auth por defecto es 10 intentos por IP en 15 minutos.
+Better Auth hashea las contraseñas y emite cookies `HttpOnly`; en producción son `Secure`. `AUTH_COOKIE_SAME_SITE` acepta `lax`, `strict` o `none`, y las mutaciones validan el origin configurado. `CORS_ALLOWED_ORIGINS` es una lista exacta, sin comodines. El límite de auth por defecto es 10 intentos por IP en 15 minutos. El registro usa una transacción PostgreSQL para crear `user`, `account` credential y `session`; los eventos de auditoría se escriben después de que Better Auth confirme la identidad y su fallo se registra sin convertir un alta válida en una cuenta parcialmente creada.
 
 El backend vuelve a verificar sesión, estado de bloqueo, permiso y access grant antes de servir mercado privado o administración. No se confía en rol, acceso ni cookies manipulables por el frontend. Los eventos `USER_REGISTERED`, `USER_LOGIN`, `USER_LOGOUT`, `USER_BLOCKED`, `USER_UNBLOCKED`, `ACCESS_GRANTED`, `ACCESS_REVOKED`, `ACCESS_RESTORED` y `ROLE_CHANGED` se guardan en `audit_logs` sin contraseñas, tokens, cookies o claves.
 
@@ -65,4 +65,4 @@ $env:RUN_DB_INTEGRATION_TESTS = "true"
 corepack pnpm run test
 ```
 
-Esto prueba registro, duplicados de email/username, login erróneo, sesión, falta de entitlement, admin, grant, revoke, restore, bloqueo, logout y auditoría sobre PostgreSQL real. Si faltan las variables, el test aparece `SKIPPED` y no realiza conexión alguna.
+Esto prueba registro, duplicados de email/username, login erróneo, sesión, falta de entitlement, admin, grant, revoke, restore, bloqueo, logout y auditoría sobre PostgreSQL real. Si faltan las variables, el test aparece `SKIPPED` y no realiza conexión alguna. La suite normal además ejecuta una prueba aislada PGlite (PostgreSQL en memoria) que comprueba la cuenta credential, login, cookie/sesión, logout y rollback completo si falla la inserción de `account`; no usa `DATABASE_URL` ni se conecta a Railway.

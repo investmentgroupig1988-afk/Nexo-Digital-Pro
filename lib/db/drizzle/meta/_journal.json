@@ -8,6 +8,13 @@
       "when": 1787113405987,
       "tag": "0000_groovy_kat_farrell",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787168870273,
+      "tag": "0001_colorful_stryfe",
+      "breakpoints": true
     }
   ]
 }

@@ -3,15 +3,17 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { username } from "better-auth/plugins";
 import {
   accounts,
-  auditActions,
-  auditLogs,
-  eq,
   getDatabase,
   sessions,
   users,
   verifications,
 } from "@workspace/db";
 import { config } from "../config";
+
+type AuthRuntimeConfig = Pick<
+  typeof config,
+  "databaseUrl" | "betterAuthSecret" | "betterAuthUrl" | "corsOrigins" | "nodeEnv" | "authCookieSameSite" | "authCookieDomain"
+>;
 
 export class AuthConfigurationError extends Error {
   constructor(message: string) {
@@ -20,30 +22,32 @@ export class AuthConfigurationError extends Error {
   }
 }
 
-let authInstance: ReturnType<typeof createAuth> | undefined;
+let authInstance: ReturnType<typeof createAuthForDatabase> | undefined;
 
-function assertAuthConfiguration(): void {
-  if (!config.databaseUrl) {
+function assertAuthConfiguration(authConfig: AuthRuntimeConfig): void {
+  if (!authConfig.databaseUrl) {
     throw new AuthConfigurationError("Persistence is not configured.");
   }
-  if (!config.betterAuthUrl) {
+  if (!authConfig.betterAuthUrl) {
     throw new AuthConfigurationError("BETTER_AUTH_URL is not configured.");
   }
-  if (!config.betterAuthSecret || config.betterAuthSecret.length < 32) {
+  if (!authConfig.betterAuthSecret || authConfig.betterAuthSecret.length < 32) {
     throw new AuthConfigurationError("BETTER_AUTH_SECRET must contain at least 32 characters.");
   }
 }
 
-function createAuth() {
-  assertAuthConfiguration();
-  const db = getDatabase();
-  const trustedOrigins = [...new Set([config.betterAuthUrl!, ...config.corsOrigins])];
+export function createAuthForDatabase(database: Parameters<typeof drizzleAdapter>[0], authConfig: AuthRuntimeConfig = config) {
+  assertAuthConfiguration(authConfig);
+  const trustedOrigins = [...new Set([authConfig.betterAuthUrl!, ...authConfig.corsOrigins])];
 
   return betterAuth({
-    baseURL: config.betterAuthUrl,
-    secret: config.betterAuthSecret,
-    database: drizzleAdapter(db, {
+    baseURL: authConfig.betterAuthUrl,
+    secret: authConfig.betterAuthSecret,
+    database: drizzleAdapter(database, {
       provider: "pg",
+      // Email sign-up creates user, credential account, and session. PostgreSQL
+      // supports transactions, so this must never fall back to sequential writes.
+      transaction: true,
       schema: {
         user: users,
         session: sessions,
@@ -62,12 +66,12 @@ function createAuth() {
     },
     advanced: {
       cookiePrefix: "nexo-digital-pro",
-      useSecureCookies: config.nodeEnv === "production",
+      useSecureCookies: authConfig.nodeEnv === "production",
       defaultCookieAttributes: {
         httpOnly: true,
-        secure: config.nodeEnv === "production",
-        sameSite: config.authCookieSameSite,
-        ...(config.authCookieDomain ? { domain: config.authCookieDomain } : {}),
+        secure: authConfig.nodeEnv === "production",
+        sameSite: authConfig.authCookieSameSite,
+        ...(authConfig.authCookieDomain ? { domain: authConfig.authCookieDomain } : {}),
       },
     },
     user: {
@@ -85,63 +89,10 @@ function createAuth() {
         usernameValidator: (value) => /^[a-zA-Z0-9_]{3,32}$/.test(value),
       }),
     ],
-    databaseHooks: {
-      user: {
-        create: {
-          before: async (user) => {
-            if (typeof user.username !== "string" || !/^[a-zA-Z0-9_]{3,32}$/.test(user.username)) {
-              return false;
-            }
-            return undefined;
-          },
-          after: async (user) => {
-            await db.insert(auditLogs).values({
-              actorUserId: user.id,
-              targetUserId: user.id,
-              action: auditActions.userRegistered,
-              metadata: { source: "email_password" },
-            });
-          },
-        },
-      },
-      session: {
-        create: {
-          before: async (session) => {
-            const [user] = await db
-              .select({ status: users.status })
-              .from(users)
-              .where(eq(users.id, session.userId))
-              .limit(1);
-            return user?.status !== "blocked";
-          },
-          after: async (session) => {
-            await Promise.all([
-              db.update(users).set({ lastLoginAt: new Date(), updatedAt: new Date() }).where(eq(users.id, session.userId)),
-              db.insert(auditLogs).values({
-                actorUserId: session.userId,
-                targetUserId: session.userId,
-                action: auditActions.userLogin,
-                metadata: { source: "email_password" },
-              }),
-            ]);
-          },
-        },
-        delete: {
-          after: async (session) => {
-            await db.insert(auditLogs).values({
-              actorUserId: session.userId,
-              targetUserId: session.userId,
-              action: auditActions.userLogout,
-              metadata: { source: "session" },
-            });
-          },
-        },
-      },
-    },
   });
 }
 
 export function getAuth() {
-  if (!authInstance) authInstance = createAuth();
+  if (!authInstance) authInstance = createAuthForDatabase(getDatabase());
   return authInstance;
 }

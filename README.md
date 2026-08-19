@@ -36,6 +36,7 @@ El schema Drizzle está en `lib/db/src/schema/index.ts` y su migración inicial 
 ```text
 corepack pnpm run db:generate  # crear una migración tras cambiar el schema
 corepack pnpm run db:migrate   # aplicar migraciones con DATABASE_URL
+corepack pnpm run auth:diagnose # diagnóstico de solo lectura; requiere AUTH_DIAGNOSTIC_EMAILS
 ```
 
 Después de registrar la primera cuenta, definir temporalmente `ADMIN_EMAIL` para esa cuenta y ejecutar:
@@ -46,7 +47,7 @@ corepack pnpm run admin:bootstrap
 
 No existe usuario admin ni contraseña predefinida. El rol `admin` tiene el catálogo de permisos inicial completo y cada grant, revocación, bloqueo, desbloqueo o cambio de rol queda en `audit_logs`.
 
-La guía completa de schema, rutas, cookies, pruebas de PostgreSQL y Railway está en [docs/AUTH_AND_DATABASE.md](docs/AUTH_AND_DATABASE.md). La guía de despliegue Vercel/Railway continúa en [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+La guía completa de schema, rutas, cookies, pruebas de PostgreSQL y Railway está en [docs/AUTH_AND_DATABASE.md](docs/AUTH_AND_DATABASE.md). La guía de despliegue Vercel/Railway continúa en [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Para investigar de forma segura cuentas creadas por una versión anterior e incompleta, consultar [docs/AUTH_STAGING_RECOVERY.md](docs/AUTH_STAGING_RECOVERY.md).
 
 ## Rutas
 

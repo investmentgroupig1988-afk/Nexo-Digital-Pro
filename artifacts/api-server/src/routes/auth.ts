@@ -1,10 +1,12 @@
-import { Router, type IRouter, type Request, type Response } from "express";
+import { Router, type IRouter } from "express";
 import { fromNodeHeaders } from "better-auth/node";
 import { z } from "zod";
 import { eq, getDatabase, users } from "@workspace/db";
 import { getAuth, AuthConfigurationError } from "../auth/auth";
 import { getRequestUser } from "../auth/session";
 import { trustedMutationOrigin } from "../middlewares/security";
+import { logger } from "../lib/logger";
+import { recordAuthEvent } from "../services/auth-events";
 
 const router: IRouter = Router();
 
@@ -22,7 +24,7 @@ const loginSchema = z.object({
 
 router.use(trustedMutationOrigin);
 
-router.post("/register", async (req, res, next) => {
+router.post("/register", async (req, res) => {
   try {
     const input = registrationSchema.parse(req.body);
     const normalizedUsername = input.username.toLowerCase();
@@ -52,13 +54,14 @@ router.post("/register", async (req, res, next) => {
       headers: fromNodeHeaders(req.headers),
       asResponse: true,
     });
+    await recordSuccessfulAuthEvent(response, "registration");
     await forwardAuthResponse(response, res);
   } catch (error) {
-    sendAuthRouteError(error, res, next);
+    sendAuthRouteError(error, "registration", res);
   }
 });
 
-router.post("/login", async (req, res, next) => {
+router.post("/login", async (req, res) => {
   try {
     const input = loginSchema.parse(req.body);
     getAuth();
@@ -77,24 +80,25 @@ router.post("/login", async (req, res, next) => {
       headers: fromNodeHeaders(req.headers),
       asResponse: true,
     });
+    await recordSuccessfulAuthEvent(response, "login");
     await forwardAuthResponse(response, res);
   } catch (error) {
-    sendAuthRouteError(error, res, next);
+    sendAuthRouteError(error, "login", res);
   }
 });
 
-router.post("/logout", async (req, res, next) => {
+router.post("/logout", async (req, res) => {
   try {
-    // Resolve the session first so the Better Auth lifecycle hook can create a
-    // logout audit event without trusting a client-provided user id.
-    await getRequestUser(req);
+    // Resolve the session first so the audit event never trusts a client id.
+    const user = await getRequestUser(req);
     const response = await getAuth().api.signOut({
       headers: fromNodeHeaders(req.headers),
       asResponse: true,
     });
+    if (response.ok) await recordAuthEvent(user.id, "logout");
     await forwardAuthResponse(response, res);
   } catch (error) {
-    sendAuthRouteError(error, res, next);
+    sendAuthRouteError(error, "logout", res);
   }
 });
 
@@ -119,7 +123,42 @@ async function forwardAuthResponse(response: globalThis.Response, res: import("e
   res.status(response.status).send(body);
 }
 
-function sendAuthRouteError(error: unknown, res: import("express").Response, next: import("express").NextFunction): void {
+async function recordSuccessfulAuthEvent(
+  response: globalThis.Response,
+  event: "registration" | "login",
+): Promise<void> {
+  if (!response.ok) {
+    logger.warn(
+      { authEvent: event, statusCode: response.status, errorCode: "AUTH_PROVIDER_REJECTED_REQUEST" },
+      "Better Auth rejected an authentication request",
+    );
+    return;
+  }
+
+  const payload: unknown = await response.clone().json().catch(() => null);
+  const userId = getResponseUserId(payload);
+  if (!userId) {
+    logger.error(
+      { authEvent: event, errorCode: "AUTH_PROVIDER_RESPONSE_INVALID" },
+      "Better Auth completed a request without a usable user identifier",
+    );
+    return;
+  }
+  await recordAuthEvent(userId, event);
+}
+
+function getResponseUserId(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object" || !("user" in payload)) return null;
+  const user = payload.user;
+  if (!user || typeof user !== "object" || !("id" in user) || typeof user.id !== "string") return null;
+  return user.id;
+}
+
+function sendAuthRouteError(
+  error: unknown,
+  stage: "registration" | "login" | "logout",
+  res: import("express").Response,
+): void {
   if (error instanceof z.ZodError) {
     res.status(400).json({ error: "Invalid registration or login input." });
     return;
@@ -128,7 +167,11 @@ function sendAuthRouteError(error: unknown, res: import("express").Response, nex
     res.status(503).json({ error: "Authentication is not configured." });
     return;
   }
-  next(error);
+  logger.error(
+    { err: error, authStage: stage, errorCode: "AUTH_OPERATION_FAILED" },
+    "Authentication operation failed",
+  );
+  res.status(500).json({ error: "Authentication could not be completed. Please try again." });
 }
 
 export default router;
