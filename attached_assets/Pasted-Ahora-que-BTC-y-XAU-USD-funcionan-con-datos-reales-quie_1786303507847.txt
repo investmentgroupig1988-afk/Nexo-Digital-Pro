@@ -1,0 +1,217 @@
+Ahora que BTC y XAU/USD funcionan con datos reales, quiero implementar ÚNICAMENTE el sistema de datos históricos e indicadores técnicos.
+
+NO conectar todavía AI Studio.
+NO modificar el frontend.
+NO implementar pagos.
+NO implementar autenticación.
+NO implementar ejecución de trades.
+NO utilizar datos simulados, aleatorios ni hardcodeados.
+
+Mantener intactos:
+- Binance para BTC
+- Alpha Vantage para XAU/USD
+- el manejo actual de errores
+- el caché existente
+- los endpoints actuales
+
+OBJETIVO:
+
+Crear un motor técnico modular que reciba OHLCV históricos reales y calcule indicadores matemáticamente en el backend.
+
+ACTIVOS:
+
+BTCUSDT
+XAUUSD
+
+TIMEFRAMES:
+
+1m
+5m
+15m
+1h
+4h
+
+Si el proveedor no permite alguno de estos intervalos para un activo, NO inventar datos. Informar claramente que ese timeframe no está disponible y utilizar solamente datos reales disponibles.
+
+DATOS HISTÓRICOS:
+
+Crear un servicio independiente para obtener y normalizar velas:
+
+timestamp
+open
+high
+low
+close
+volume
+
+El servicio debe devolver una estructura común independientemente del proveedor.
+
+Implementar caché para evitar solicitudes repetidas y respetar los límites de cada proveedor.
+
+INDICADORES:
+
+Implementar matemáticamente:
+
+- EMA 20
+- EMA 50
+- EMA 200
+- RSI 14
+- SMA 20
+- ATR 14
+- volumen actual
+- volumen medio
+- máximos/mínimos del período
+- soporte
+- resistencia
+
+FIBONACCI:
+
+Implementar Fibonacci basado en swing high y swing low reales del histórico utilizado.
+
+Devolver al menos:
+
+0.236
+0.382
+0.5
+0.618
+0.786
+
+Indicar claramente:
+
+swingHigh
+swingLow
+direction
+
+ESTRUCTURA DE MERCADO:
+
+Crear una metodología determinística y documentada para identificar:
+
+- tendencia alcista
+- tendencia bajista
+- lateral
+- higher high
+- higher low
+- lower high
+- lower low
+
+No afirmar estructura si no existen suficientes datos.
+
+VOLUMEN:
+
+Calcular:
+
+- volumen actual
+- volumen medio
+- ratio volumen/volumen medio
+
+Si el proveedor no entrega volumen para determinado activo/timeframe, devolver null y explicar "volumen no disponible".
+
+IMPORTANTE:
+
+Nunca rellenar indicadores faltantes con 0.
+
+Nunca utilizar valores inventados.
+
+Si faltan suficientes velas:
+
+{
+  "status": "INSUFFICIENT_DATA"
+}
+
+y explicar qué falta.
+
+CREAR ENDPOINT:
+
+GET /api/indicators?symbol=BTCUSDT&timeframe=15m
+
+GET /api/indicators?symbol=XAUUSD&timeframe=15m
+
+La respuesta debe incluir:
+
+symbol
+timeframe
+timestamp
+price
+candlesUsed
+
+indicators:
+  ema20
+  ema50
+  ema200
+  sma20
+  rsi14
+  atr14
+  volume
+  averageVolume
+  volumeRatio
+
+fibonacci:
+  swingHigh
+  swingLow
+  direction
+  levels:
+    0.236
+    0.382
+    0.5
+    0.618
+    0.786
+
+marketStructure:
+  trend
+  structure
+  support
+  resistance
+
+dataQuality:
+  sufficient
+  candleCount
+  volumeAvailable
+  provider
+
+IMPORTANTE SOBRE LA CALIDAD:
+
+No quiero una "probabilidad de ganar".
+
+No quiero una señal BUY/SELL todavía.
+
+No quiero que OpenAI participe todavía.
+
+Este paso es EXCLUSIVAMENTE para crear un motor técnico fiable y auditable.
+
+Además crea:
+
+GET /api/candles?symbol=BTCUSDT&timeframe=15m&limit=200
+
+y
+
+GET /api/candles?symbol=XAUUSD&timeframe=15m&limit=200
+
+para poder verificar las velas reales.
+
+SEGURIDAD:
+
+Las API keys continúan exclusivamente en Secrets/environment variables.
+
+Nunca devolverlas.
+Nunca imprimirlas.
+Nunca incluirlas en logs.
+
+PRUEBAS:
+
+Después de implementar:
+
+1. Build del backend.
+2. /api/healthz
+3. BTCUSDT candles.
+4. XAUUSD candles.
+5. BTCUSDT indicators.
+6. XAUUSD indicators.
+7. Verificar que EMA/RSI/ATR se calculan a partir de velas reales.
+8. Verificar que no existe Math.random.
+9. Buscar y eliminar cualquier dato ficticio relacionado con indicadores si existiera.
+
+Si un proveedor no permite obtener suficientes históricos para un activo/timeframe, NO cambies de proveedor arbitrariamente y NO inventes los datos. Devuelve el estado de datos insuficientes y explica exactamente la limitación.
+
+NO continúes con el motor de señales después de terminar esto.
+
+Detente después de que el sistema de históricos e indicadores esté funcionando y probado.

@@ -63,7 +63,13 @@ async function buildAll() {
       "@swc/*",
       "@aws-sdk/*",
       "@azure/*",
-      "@opentelemetry/*",
+      // Better Auth imports semantic conventions during module initialization.
+      // Those conventions are regular JavaScript and must stay in the bundle;
+      // externalizing the entire OpenTelemetry namespace leaves a production
+      // runtime dependency that this artifact does not own. Its API package is
+      // an optional, lazy instrumentation peer, so leave only that import
+      // external and let Better Auth handle its absence as designed.
+      "@opentelemetry/api",
       "@google-cloud/*",
       "@google/*",
       "googleapis",

@@ -6,6 +6,7 @@ const mockup = resolve(projectRoot, "artifacts/mockup-sandbox");
 
 await run(process.execPath, [resolve(projectRoot, "scripts/typecheck.mjs")]);
 await run(process.execPath, [resolve(apiServer, "build.mjs")], { cwd: apiServer });
+await run(process.execPath, [resolve(projectRoot, "scripts/verify-api-dist.mjs")]);
 
 const vite = await resolvePackageBin("vite", "vite", mockup);
 await run(process.execPath, [vite, "build"], { cwd: mockup });
