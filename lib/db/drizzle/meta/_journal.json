@@ -22,6 +22,13 @@
       "when": 1787239249431,
       "tag": "0002_magical_gamma_corps",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787258215205,
+      "tag": "0003_first_bloodscream",
+      "breakpoints": true
     }
   ]
 }

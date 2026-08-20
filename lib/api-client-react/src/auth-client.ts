@@ -89,6 +89,23 @@ export type CreatePaymentRequestInput = {
   proof?: { fileName: string; mimeType: string; dataBase64: string };
 };
 
+export type CommercialSignal = {
+  id: string; symbol: string; timeframe: string; direction: "LONG" | "SHORT";
+  entryPrice: string; stopLoss: string; takeProfit: string; riskRewardRatio: string;
+  status: "OPEN" | "WIN" | "LOSS" | "EXPIRED" | "CANCELLED";
+  openedAt: string; closedAt: string | null; returnPct: string | null; result: string;
+  strategyVersion: string; createdAt: string;
+};
+
+export type SignalDashboardResponse = {
+  activeSignal: CommercialSignal | null;
+  evaluation: "LONG" | "SHORT" | "NO_SIGNAL";
+  message: string | null;
+  context: { trend: "bullish" | "bearish" | "sideways" | null; condition: "trending" | "mixed" | "insufficient_data"; strength: "high" | "medium" | "low" };
+  metrics: { total: number; wins: number; losses: number; winRate: number | null; lossRate: number | null; accumulatedReturnPct: number | null };
+  history: CommercialSignal[];
+};
+
 const jsonRequest = {
   responseType: "json" as const,
   headers: { "content-type": "application/json" },
@@ -130,6 +147,10 @@ export function getMyPaymentRequests(signal?: AbortSignal): Promise<{ requests: 
 
 export function createPaymentRequest(input: CreatePaymentRequestInput): Promise<{ request: PaymentRequest; whatsappUrl: string }> {
   return customFetch("/api/payment-requests", { ...jsonRequest, method: "POST", body: JSON.stringify(input) });
+}
+
+export function getSignalDashboard(timeframe = "15m", signal?: AbortSignal): Promise<SignalDashboardResponse> {
+  return customFetch(`/api/signals/dashboard?symbol=BTCUSDT&timeframe=${encodeURIComponent(timeframe)}`, { responseType: "json", signal });
 }
 
 export function getAdminPaymentRequests(signal?: AbortSignal): Promise<{ requests: AdminPaymentRequest[] }> {

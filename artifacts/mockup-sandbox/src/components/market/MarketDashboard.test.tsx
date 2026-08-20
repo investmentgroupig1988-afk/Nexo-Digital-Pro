@@ -2,167 +2,21 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const api = vi.hoisted(() => ({
-  getHistoricalCandles: vi.fn(),
-  getMarketData: vi.fn(),
-  getTechnicalIndicators: vi.fn(),
-  healthCheck: vi.fn(),
-  setBaseUrl: vi.fn(),
-}));
-
+const api = vi.hoisted(() => ({ getSignalDashboard: vi.fn(), healthCheck: vi.fn(), setBaseUrl: vi.fn() }));
 vi.mock("@workspace/api-client-react", () => api);
-
 import { MarketDashboard } from "./MarketDashboard";
-import { configureApiClient } from "@/lib/api";
 
-function indicators(status: "OK" | "INSUFFICIENT_DATA" | "UNAVAILABLE" = "OK") {
-  const unavailable = status === "UNAVAILABLE";
-  const insufficient = status === "INSUFFICIENT_DATA";
-  return {
-    status,
-    message: insufficient ? "At least 200 real candles are required." : unavailable ? "The market data provider is temporarily unavailable." : null,
-    symbol: "BTCUSDT",
-    timeframe: "15m",
-    timestamp: "2026-01-01T00:00:00.000Z",
-    price: 95_000,
-    candlesUsed: insufficient ? 10 : unavailable ? 0 : 200,
-    indicators: {
-      ema20: null,
-      ema50: 94_000,
-      ema200: null,
-      sma20: 94_500,
-      rsi14: null,
-      atr14: 120,
-      volume: null,
-      averageVolume: 42,
-      volumeRatio: null,
-      periodHigh: 97_000,
-      periodLow: 91_000,
-    },
-    fibonacci: {
-      swingHigh: null,
-      swingLow: null,
-      direction: null,
-      levels: { "0.236": null, "0.382": null, "0.5": null, "0.618": null, "0.786": null },
-    },
-    marketStructure: {
-      trend: "bullish",
-      structure: "higher_high_and_higher_low",
-      higherHigh: true,
-      higherLow: true,
-      lowerHigh: false,
-      lowerLow: false,
-      support: 91_000,
-      resistance: 97_000,
-    },
-    dataQuality: {
-      sufficient: status === "OK",
-      candleCount: status === "OK" ? 200 : insufficient ? 10 : 0,
-      volumeAvailable: false,
-      provider: "binance",
-      reason: insufficient ? "At least 200 real candles are required." : unavailable ? "The market data provider is temporarily unavailable." : "Volume is not available.",
-    },
-  };
-}
+const empty = { activeSignal: null, evaluation: "NO_SIGNAL", message: "Esperando una configuración válida.", context: { trend: "sideways", condition: "mixed", strength: "low" }, metrics: { total: 0, wins: 0, losses: 0, winRate: null, lossRate: null, accumulatedReturnPct: null }, history: [] };
+const active = { ...empty, activeSignal: { id: "signal-1", symbol: "BTCUSDT", timeframe: "15m", direction: "LONG", entryPrice: "95000", stopLoss: "94000", takeProfit: "96500", riskRewardRatio: "1.5", status: "OPEN", openedAt: "2026-01-01T00:00:00.000Z", closedAt: null, returnPct: null, result: "OPEN", strategyVersion: "NEXO_CONFLUENCE_V1", createdAt: "2026-01-01T00:00:00.000Z" }, evaluation: "LONG" };
 
-function renderDashboard() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
-  });
-  return render(
-    <QueryClientProvider client={client}>
-      <MarketDashboard />
-    </QueryClientProvider>,
-  );
-}
-
-function configureSuccessfulApi() {
-  api.healthCheck.mockResolvedValue({ status: "ok" });
-  api.getMarketData.mockImplementation(({ symbol }: { symbol: string }) => Promise.resolve({
-    symbol,
-    price: symbol === "XAUUSD" ? 2_900 : 95_000,
-    currency: "USD",
-    unit: symbol === "XAUUSD" ? "troy_ounce" : "base_asset",
-    provider: symbol === "XAUUSD" ? "twelvedata" : "binance",
-    assetClass: symbol === "XAUUSD" ? "gold" : "crypto",
-    updatedAt: "2026-01-01T00:00:00.000Z",
-  }));
-  api.getTechnicalIndicators.mockResolvedValue(indicators());
-}
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  configureSuccessfulApi();
-});
-
+function renderDashboard() { const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } }); return render(<QueryClientProvider client={client}><MarketDashboard /></QueryClientProvider>); }
+beforeEach(() => { vi.clearAllMocks(); api.healthCheck.mockResolvedValue({ status: "ok" }); api.getSignalDashboard.mockResolvedValue(empty); });
 afterEach(() => cleanup());
 
-describe("MarketDashboard", () => {
-  it("renders loading feedback without a candlestick chart", () => {
-    api.healthCheck.mockReturnValue(new Promise(() => undefined));
-    api.getMarketData.mockReturnValue(new Promise(() => undefined));
-    api.getTechnicalIndicators.mockReturnValue(new Promise(() => undefined));
-
-    renderDashboard();
-
-    expect(screen.getByText("Cargando el resumen de BTCUSDT…")).toBeTruthy();
-    expect(screen.getByText("Cargando los indicadores…")).toBeTruthy();
-    expect(screen.queryByRole("img", { name: /gráfico|velas/i })).toBeNull();
-    expect(api.getHistoricalCandles).not.toHaveBeenCalled();
-  });
-
-  it("shows a safe error state when the market API fails", async () => {
-    api.getMarketData.mockRejectedValue(new Error("internal provider details"));
-
-    renderDashboard();
-
-    expect(await screen.findByText("No se pudo obtener la cotización actual. Verificá la conexión con la API y reintentá.")).toBeTruthy();
-    expect(screen.queryByText("internal provider details")).toBeNull();
-  });
-
-  it("uses BTCUSDT/XAUUSD and the selected timeframe for real API requests", async () => {
-    renderDashboard();
-    await screen.findByText("Análisis disponible");
-
-    fireEvent.change(screen.getByLabelText("Mercado"), { target: { value: "XAUUSD" } });
-    await waitFor(() => expect(api.getMarketData).toHaveBeenLastCalledWith({ symbol: "XAUUSD" }, expect.anything()));
-    await waitFor(() => expect(api.getTechnicalIndicators).toHaveBeenLastCalledWith({ symbol: "XAUUSD", timeframe: "15m" }, expect.anything()));
-
-    fireEvent.change(screen.getByLabelText("Período"), { target: { value: "1h" } });
-    await waitFor(() => expect(api.getTechnicalIndicators).toHaveBeenLastCalledWith({ symbol: "XAUUSD", timeframe: "1h" }, expect.anything()));
-    expect(api.getHistoricalCandles).not.toHaveBeenCalled();
-  });
-
-  it("presents real indicator fields, translated structure, and unavailable nulls", async () => {
-    renderDashboard();
-
-    expect(await screen.findByText("EMA 50")).toBeTruthy();
-    expect(screen.getByText("94.000")).toBeTruthy();
-    expect(screen.getByText("Alcista")).toBeTruthy();
-    expect(screen.getByText("HH + HL")).toBeTruthy();
-    expect(screen.getAllByText("No disponible").length).toBeGreaterThan(1);
-    expect(screen.getByText(/No constituye asesoramiento financiero/)).toBeTruthy();
-  });
-
-  it("makes insufficient historical data explicit", async () => {
-    api.getTechnicalIndicators.mockResolvedValue(indicators("INSUFFICIENT_DATA"));
-
-    renderDashboard();
-
-    expect((await screen.findAllByText(/Datos históricos insuficientes/)).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("No disponible").length).toBeGreaterThan(1);
-  });
-
-  it("makes a temporarily unavailable analysis explicit", async () => {
-    api.getTechnicalIndicators.mockResolvedValue(indicators("UNAVAILABLE"));
-
-    renderDashboard();
-
-    expect((await screen.findAllByText(/Datos no disponibles temporalmente/)).length).toBeGreaterThan(0);
-  });
-
-  it("configures a separately hosted API only through the shared client", () => {
-    configureApiClient("https://api.example.com/");
-    expect(api.setBaseUrl).toHaveBeenLastCalledWith("https://api.example.com/");
-  });
+describe("commercial signal dashboard", () => {
+  it("treats NO_SIGNAL as a normal professional state and invents no metrics", async () => { renderDashboard(); expect(await screen.findByText("SIN SEÑAL ACTIVA")).toBeTruthy(); expect(screen.getByText("El sistema está esperando una configuración técnica válida.")).toBeTruthy(); expect(screen.getAllByText("Aún no hay suficiente historial para calcular esta métrica.").length).toBeGreaterThan(0); expect(screen.queryByText(/90%|rentabilidad garantizada|win rate de ejemplo/i)).toBeNull(); });
+  it("shows entry, SL, TP and R:R for a real active signal", async () => { api.getSignalDashboard.mockResolvedValue(active); renderDashboard(); expect(await screen.findByText("LONG")).toBeTruthy(); expect(screen.getByText("Entrada")).toBeTruthy(); expect(screen.getByText("Stop loss")).toBeTruthy(); expect(screen.getByText("Take profit")).toBeTruthy(); expect(screen.getByText("1:1,5")).toBeTruthy(); });
+  it("does not expose EMA, RSI, ATR or Fibonacci details in the commercial dashboard", async () => { renderDashboard(); await screen.findByText("SIN SEÑAL ACTIVA"); for (const detail of ["EMA 20", "EMA 50", "RSI 14", "ATR 14", "Fibonacci"]) expect(screen.queryByText(detail)).toBeNull(); });
+  it("keeps BTC production-only, marks XAU locked, and requests only the selected timeframe", async () => { renderDashboard(); await screen.findByText(/XAUUSD.*Próximamente/); fireEvent.change(screen.getByLabelText("Timeframe"), { target: { value: "1h" } }); await waitFor(() => expect(api.getSignalDashboard).toHaveBeenLastCalledWith("1h", expect.anything())); expect(screen.queryByRole("option", { name: "XAUUSD" })).toBeNull(); });
+  it("contains mobile overflow and keeps controls touch friendly", async () => { Object.defineProperty(window, "innerWidth", { configurable: true, value: 360 }); renderDashboard(); await screen.findByText("SIN SEÑAL ACTIVA"); expect(document.querySelector("main")?.className).toContain("overflow-x-hidden"); expect(screen.getByLabelText("Timeframe").className).toContain("min-h-12"); });
 });

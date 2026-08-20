@@ -1,35 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
-import {
-  getMarketData,
-  getTechnicalIndicators,
-  healthCheck,
-} from "@workspace/api-client-react";
+import { getSignalDashboard, healthCheck } from "@workspace/api-client-react";
 import "@/lib/api";
-import { refreshIntervalFor, type MarketSymbol, type MarketTimeframe } from "@/lib/market";
+import { refreshIntervalFor, type MarketTimeframe } from "@/lib/market";
 
-export function useMarketDashboard(symbol: MarketSymbol, timeframe: MarketTimeframe) {
-  const analysisRefreshInterval = refreshIntervalFor(timeframe);
-
-  const health = useQuery({
-    queryKey: ["healthz"],
-    queryFn: ({ signal }) => healthCheck({ signal }),
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+export function useMarketDashboard(timeframe: MarketTimeframe) {
+  const refreshInterval = refreshIntervalFor(timeframe);
+  const health = useQuery({ queryKey: ["healthz"], queryFn: ({ signal }) => healthCheck({ signal }), staleTime: 30_000, refetchInterval: 60_000 });
+  const dashboard = useQuery({
+    queryKey: ["signal-dashboard", "BTCUSDT", timeframe],
+    queryFn: ({ signal }) => getSignalDashboard(timeframe, signal),
+    staleTime: Math.min(refreshInterval, 30_000),
+    refetchInterval: refreshInterval,
   });
-
-  const market = useQuery({
-    queryKey: ["market", symbol],
-    queryFn: ({ signal }) => getMarketData({ symbol }, { signal }),
-    staleTime: 15_000,
-    refetchInterval: 30_000,
-  });
-
-  const indicators = useQuery({
-    queryKey: ["indicators", symbol, timeframe],
-    queryFn: ({ signal }) => getTechnicalIndicators({ symbol, timeframe }, { signal }),
-    staleTime: Math.min(analysisRefreshInterval, 30_000),
-    refetchInterval: analysisRefreshInterval,
-  });
-
-  return { health, market, indicators };
+  return { health, dashboard };
 }

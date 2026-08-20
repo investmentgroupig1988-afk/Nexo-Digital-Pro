@@ -220,13 +220,26 @@ export const signals = pgTable("signals", {
   closedAt: timestamp("closed_at", { withTimezone: true }),
   returnPct: numeric("return_pct", { precision: 12, scale: 6 }),
   result: varchar("result", { length: 16 }),
-  strategyVersion: varchar("strategy_version", { length: 64 }),
-  indicatorSnapshot: jsonb("indicator_snapshot"),
+  strategyVersion: varchar("strategy_version", { length: 64 }).notNull(),
+  configurationFingerprint: varchar("configuration_fingerprint", { length: 64 }).notNull(),
+  indicatorSnapshot: jsonb("indicator_snapshot").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdAt,
 }, (table) => [
   index("signals_status_created_index").on(table.status, table.createdAt),
   index("signals_symbol_timeframe_index").on(table.symbol, table.timeframe),
+  uniqueIndex("signals_open_strategy_unique")
+    .on(table.symbol, table.timeframe, table.strategyVersion)
+    .where(sql`${table.status} = 'OPEN'`),
+  uniqueIndex("signals_configuration_unique")
+    .on(table.configurationFingerprint),
+  check("signals_direction_valid", sql`${table.direction} IN ('LONG', 'SHORT')`),
+  check("signals_status_valid", sql`${table.status} IN ('OPEN', 'WIN', 'LOSS', 'EXPIRED', 'CANCELLED')`),
+  check("signals_risk_reward_minimum", sql`${table.riskRewardRatio} >= 1.5`),
 ]);
+
+export const signalDirections = { long: "LONG", short: "SHORT" } as const;
+export const signalStatuses = { open: "OPEN", win: "WIN", loss: "LOSS", expired: "EXPIRED", cancelled: "CANCELLED" } as const;
 
 export const accessPlans = {
   foundersLifetime: "FOUNDERS_LIFETIME",

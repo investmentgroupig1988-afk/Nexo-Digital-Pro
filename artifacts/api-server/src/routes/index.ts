@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import healthRouter from "./health";
 import historicalRouter from "./historical";
 import marketRouter from "./market";
-import signalRouter from "./signal";
+import signalsRouter from "./signals";
 import authRouter from "./auth";
 import accountRouter from "./account";
 import adminRouter from "./admin";
@@ -19,6 +19,6 @@ router.use(paymentRequestsRouter);
 router.use(adminRouter);
 router.use(requireProductAccess(), historicalRouter);
 router.use(requireProductAccess(), marketRouter);
-router.use(signalRouter);
+router.use(requireProductAccess(), signalsRouter);
 
 export default router;

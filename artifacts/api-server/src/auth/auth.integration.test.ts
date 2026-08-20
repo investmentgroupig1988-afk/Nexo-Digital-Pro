@@ -74,6 +74,7 @@ if (!testDatabaseUrl || !integrationEnabled) {
     assert.equal(badLogin.status, 401);
     const privateRoute = await request("/api/market?symbol=BTCUSDT", { headers: { cookie: memberCookie } });
     assert.equal(privateRoute.status, 403);
+    assert.equal((await request("/api/signals/dashboard", { headers: { cookie: memberCookie } })).status, 403);
   });
 
   test("administrator permissions grant, revoke, restore, and block access server-side", async () => {
@@ -89,6 +90,7 @@ if (!testDatabaseUrl || !integrationEnabled) {
     assert.equal(adminState.user.role, "admin");
     assert.equal(adminState.access.hasAccess, false);
     assert.equal((await request("/api/market?symbol=BTCUSDT", { headers: { cookie: adminCookie } })).status, 403);
+    assert.equal((await request("/api/signals/dashboard", { headers: { cookie: adminCookie } })).status, 403);
 
     const grant = await request(`/api/admin/users/${memberId}/grant-access`, { method: "POST", headers: { cookie: adminCookie }, body: JSON.stringify({ reason: "integration test" }) });
     assert.equal(grant.status, 201);
@@ -96,6 +98,7 @@ if (!testDatabaseUrl || !integrationEnabled) {
     assert.equal((await grantedAccess.json() as { access: { hasAccess: boolean } }).access.hasAccess, true);
     assert.equal((await (await request("/api/me", { headers: { cookie: memberCookie } })).json() as { user: { role: string } }).user.role, "user");
     assert.equal((await request("/api/admin/users", { headers: { cookie: memberCookie } })).status, 403);
+    assert.notEqual((await request("/api/signals/dashboard", { headers: { cookie: memberCookie } })).status, 403);
 
     const revoke = await request(`/api/admin/users/${memberId}/revoke-access`, { method: "POST", headers: { cookie: adminCookie }, body: JSON.stringify({ reason: "integration test" }) });
     assert.equal(revoke.status, 200);
