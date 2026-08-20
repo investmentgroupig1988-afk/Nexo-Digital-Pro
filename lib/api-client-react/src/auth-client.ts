@@ -2,9 +2,9 @@ import { customFetch } from "./custom-fetch";
 
 export type AccessSummary = {
   hasAccess: boolean;
-  plan: "FOUNDERS_LIFETIME" | "MONTHLY_PRO" | null;
+  plan: "FOUNDERS_LIFETIME" | "PARTNER" | "TESTER" | "COMPLIMENTARY" | "MONTHLY_PRO" | null;
   accessType: "ADMIN_MANUAL" | "PAYMENT" | "PROMOTION" | null;
-  status: "PENDING" | "ACTIVE" | "REVOKED" | "EXPIRED" | null;
+  status: "pending" | "active" | "revoked" | "expired" | null;
   grantedAt: string | null;
   expiresAt: string | null;
 };
@@ -51,6 +51,44 @@ export type AdminAuditEntry = {
   target: { username: string; email: string } | null;
 };
 
+export type PaymentRequestMethod = "MERCADO_PAGO_TRANSFER" | "USDT_TRC20";
+export type PaymentRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "NEEDS_REVIEW";
+export type PaymentProof = { fileName: string; mimeType: string; size: number; url: string };
+
+export type PaymentRequest = {
+  id: string;
+  userId: string;
+  method: PaymentRequestMethod;
+  amount: string;
+  currency: "ARS" | "USDT" | string;
+  declaredPaidAt: string;
+  referenceOrTxid: string;
+  payerName: string | null;
+  senderWallet: string | null;
+  proof: PaymentProof | null;
+  status: PaymentRequestStatus;
+  notes: string | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminPaymentRequest = PaymentRequest & {
+  user: { id: string; email: string; username: string } | null;
+  reviewer: { id: string; email: string; username: string } | null;
+};
+
+export type CreatePaymentRequestInput = {
+  method: PaymentRequestMethod;
+  amount: string;
+  declaredPaidAt: string;
+  referenceOrTxid: string;
+  payerName?: string;
+  senderWallet?: string;
+  proof?: { fileName: string; mimeType: string; dataBase64: string };
+};
+
 const jsonRequest = {
   responseType: "json" as const,
   headers: { "content-type": "application/json" },
@@ -86,6 +124,30 @@ export function getMyAccess(signal?: AbortSignal): Promise<{ access: AccessSumma
   return customFetch<{ access: AccessSummary }>("/api/access/me", { responseType: "json", signal });
 }
 
+export function getMyPaymentRequests(signal?: AbortSignal): Promise<{ requests: PaymentRequest[] }> {
+  return customFetch<{ requests: PaymentRequest[] }>("/api/payment-requests/me", { responseType: "json", signal });
+}
+
+export function createPaymentRequest(input: CreatePaymentRequestInput): Promise<{ request: PaymentRequest; whatsappUrl: string }> {
+  return customFetch("/api/payment-requests", { ...jsonRequest, method: "POST", body: JSON.stringify(input) });
+}
+
+export function getAdminPaymentRequests(signal?: AbortSignal): Promise<{ requests: AdminPaymentRequest[] }> {
+  return customFetch<{ requests: AdminPaymentRequest[] }>("/api/admin/payment-requests", { responseType: "json", signal });
+}
+
+export function reviewPaymentRequest(requestId: string, decision: Exclude<PaymentRequestStatus, "PENDING">, notes?: string): Promise<{ request: PaymentRequest; grantId: string | null }> {
+  return customFetch(`/api/admin/payment-requests/${encodeURIComponent(requestId)}/review`, {
+    ...jsonRequest,
+    method: "POST",
+    body: JSON.stringify({ decision, notes }),
+  });
+}
+
+export function getPaymentProof(url: string): Promise<Blob> {
+  return customFetch<Blob>(url, { responseType: "blob" });
+}
+
 export function getAdminUsers(query = "", signal?: AbortSignal): Promise<{ users: AdminUser[] }> {
   const params = new URLSearchParams({ limit: "100" });
   if (query.trim()) params.set("q", query.trim());
@@ -97,10 +159,14 @@ export function getAdminAudit(signal?: AbortSignal): Promise<{ audit: AdminAudit
 }
 
 export function grantLifetimeAccess(userId: string, reason?: string): Promise<{ access: AccessSummary }> {
+  return grantManualAccess(userId, { plan: "FOUNDERS_LIFETIME", reason });
+}
+
+export function grantManualAccess(userId: string, input: { plan: "FOUNDERS_LIFETIME" | "PARTNER" | "TESTER" | "COMPLIMENTARY"; reason?: string; expiresAt?: string | null }): Promise<{ access: AccessSummary }> {
   return customFetch(`/api/admin/users/${encodeURIComponent(userId)}/grant-access`, {
     ...jsonRequest,
     method: "POST",
-    body: JSON.stringify({ reason }),
+    body: JSON.stringify(input),
   });
 }
 

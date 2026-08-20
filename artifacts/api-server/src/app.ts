@@ -38,6 +38,9 @@ app.use(
 );
 app.use(securityHeaders);
 app.use(corsMiddleware);
+// Payment evidence is base64 encoded and strictly capped at 5 MB after the
+// server validates its real file signature. Other JSON endpoints stay small.
+app.use("/api/payment-requests", express.json({ limit: "8mb" }));
 app.use(express.json({ limit: "100kb" }));
 app.use(express.urlencoded({ extended: false, limit: "100kb" }));
 app.use("/api", publicApiRateLimit, router);
@@ -47,6 +50,10 @@ app.use((_req, res) => {
 });
 
 const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
+  if (error && typeof error === "object" && "type" in error && error.type === "entity.too.large") {
+    res.status(413).json({ error: "El comprobante supera el tamaño permitido." });
+    return;
+  }
   if (error instanceof SyntaxError && "body" in error) {
     res.status(400).json({ error: "Invalid JSON request body." });
     return;

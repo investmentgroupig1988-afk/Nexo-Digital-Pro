@@ -9,6 +9,12 @@ const api = vi.hoisted(() => ({
   register: vi.fn(),
   getAdminAudit: vi.fn(),
   getAdminUsers: vi.fn(),
+  getAdminPaymentRequests: vi.fn(),
+  getMyPaymentRequests: vi.fn(),
+  createPaymentRequest: vi.fn(),
+  reviewPaymentRequest: vi.fn(),
+  getPaymentProof: vi.fn(),
+  grantManualAccess: vi.fn(),
   grantLifetimeAccess: vi.fn(),
   revokeAccess: vi.fn(),
   restoreAccess: vi.fn(),
@@ -38,7 +44,7 @@ function account(hasAccess: boolean, role: "user" | "admin" = "user") {
       hasAccess,
       plan: hasAccess ? "FOUNDERS_LIFETIME" : null,
       accessType: hasAccess ? "ADMIN_MANUAL" : null,
-      status: hasAccess ? "ACTIVE" : null,
+      status: hasAccess ? "active" : null,
       grantedAt: hasAccess ? "2026-01-02T00:00:00.000Z" : null,
       expiresAt: null,
     },
@@ -52,6 +58,7 @@ function renderApp() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  api.getMyPaymentRequests.mockResolvedValue({ requests: [] });
 });
 
 afterEach(() => cleanup());
@@ -100,12 +107,42 @@ describe("commercial access shell", () => {
     renderApp();
     expect(await screen.findByText("Sin acceso privado")).toBeTruthy();
     expect(screen.queryByText("Panel de análisis con acceso")).toBeNull();
+    expect(await screen.findByRole("button", { name: "Obtener acceso" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Obtener acceso" }));
+    expect(screen.getByText("Mercado Pago / transferencia")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /USDT TRC20/i }));
+    expect(screen.getByText("TJmF8D7twrHckM1LfqPwh64WgYcSgURKRS")).toBeTruthy();
+  });
+
+  it("shows a pending request as under review and does not offer a duplicate form", async () => {
+    api.getAccount.mockResolvedValue(account(false));
+    api.getMyPaymentRequests.mockResolvedValue({ requests: [{
+      id: "5db27aa4-9c43-4ac5-bb7d-5694b1d54150",
+      userId: "user-1",
+      method: "USDT_TRC20",
+      amount: "27.00000000",
+      currency: "USDT",
+      declaredPaidAt: "2026-01-03T00:00:00.000Z",
+      referenceOrTxid: "a".repeat(64),
+      payerName: null,
+      senderWallet: null,
+      proof: null,
+      status: "PENDING",
+      notes: null,
+      reviewedBy: null,
+      reviewedAt: null,
+      createdAt: "2026-01-03T00:00:00.000Z",
+      updatedAt: "2026-01-03T00:00:00.000Z",
+    }] });
+    renderApp();
+    expect(await screen.findByRole("heading", { name: "Solicitud en revisión" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Obtener acceso" })).toBeNull();
   });
 
   it("opens the analysis panel only after the server reports active access", async () => {
     api.getAccount.mockResolvedValue(account(true));
     renderApp();
-    await screen.findByText("Founders Lifetime");
+    await screen.findByText("Acceso Founders");
     fireEvent.click(screen.getByText("Abrir panel privado"));
     expect(await screen.findByText("Panel de análisis con acceso")).toBeTruthy();
     expect(screen.queryByText("Admin")).toBeNull();
@@ -115,8 +152,17 @@ describe("commercial access shell", () => {
     api.getAccount.mockResolvedValue(account(false, "admin"));
     renderApp();
     expect(await screen.findByText("Sin acceso privado")).toBeTruthy();
-    fireEvent.click(screen.getByText("Admin"));
+    fireEvent.click(screen.getByText("Administración"));
     expect(await screen.findByText("Administración protegida")).toBeTruthy();
     expect(screen.queryByText("Panel de análisis con acceso")).toBeNull();
+  });
+
+  it("keeps PARTNER as a product entitlement without exposing Administration", async () => {
+    const partnerAccount = account(true);
+    partnerAccount.access.plan = "PARTNER";
+    api.getAccount.mockResolvedValue(partnerAccount);
+    renderApp();
+    expect(await screen.findByText("Acceso Partner")).toBeTruthy();
+    expect(screen.queryByText("Administración")).toBeNull();
   });
 });

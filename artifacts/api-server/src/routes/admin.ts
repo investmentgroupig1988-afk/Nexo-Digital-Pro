@@ -1,15 +1,29 @@
 import { Router, type IRouter, type Request } from "express";
 import { z } from "zod";
-import { auditActions, auditLogs, desc, eq, getDatabase, ilike, inArray, or, sessions, users } from "@workspace/db";
+import { accessPlans, auditActions, auditLogs, desc, eq, getDatabase, ilike, inArray, or, paymentRequestStatuses, sessions, users } from "@workspace/db";
 import { currentAuthenticatedUser, requireAdminRole } from "../auth/session";
 import { trustedMutationOrigin } from "../middlewares/security";
-import { AccessStateError, getEffectiveAccess, grantLifetimeAccess, listAccessHistory, restoreAccess, revokeAccess } from "../services/access";
+import { AccessStateError, getEffectiveAccess, grantAccess, listAccessHistory, restoreAccess, revokeAccess } from "../services/access";
 import { writeAuditLog } from "../services/audit";
+import { listPaymentRequests, PaymentRequestError, reviewPaymentRequest } from "../services/payment-requests";
 import { serializeAccess } from "./account";
 
 const router: IRouter = Router();
 const userIdSchema = z.string().trim().min(1).max(128);
 const reasonSchema = z.object({ reason: z.string().trim().max(500).optional() });
+const grantSchema = z.object({
+  reason: z.string().trim().max(500).optional(),
+  plan: z.enum([accessPlans.foundersLifetime, accessPlans.partner, accessPlans.tester, accessPlans.complimentary]).default(accessPlans.foundersLifetime),
+  expiresAt: z.string().datetime({ offset: true }).nullable().optional(),
+}).superRefine((input, context) => {
+  if (input.plan === accessPlans.foundersLifetime && input.expiresAt) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Founders no admite vencimiento.", path: ["expiresAt"] });
+  }
+});
+const reviewSchema = z.object({
+  decision: z.enum([paymentRequestStatuses.approved, paymentRequestStatuses.rejected, paymentRequestStatuses.needsReview]),
+  notes: z.string().trim().max(2_000).optional(),
+});
 const roleSchema = z.object({ role: z.enum(["user", "admin"]) });
 
 router.use(trustedMutationOrigin);
@@ -70,14 +84,47 @@ router.get("/admin/users/:id", async (req, res, next) => {
 router.post("/admin/users/:id/grant-access", async (req, res, next) => {
   try {
     const targetUserId = userIdSchema.parse(req.params.id);
-    const input = reasonSchema.parse(req.body);
+    const input = grantSchema.parse(req.body);
     if (!await findUser(targetUserId)) {
       res.status(404).json({ error: "User not found." });
       return;
     }
     const actor = currentAuthenticatedUser(res);
-    const result = await grantLifetimeAccess({ userId: targetUserId, actorUserId: actor.id, reason: input.reason, context: requestAuditContext(req) });
+    const result = await grantAccess({
+      userId: targetUserId,
+      actorUserId: actor.id,
+      plan: input.plan,
+      reason: input.reason,
+      expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+      context: requestAuditContext(req),
+    });
     res.status(result.changed ? 201 : 200).json({ access: serializeAccess({ hasAccess: true, grant: result.grant }), changed: result.changed });
+  } catch (error) {
+    sendAdminError(error, res, next);
+  }
+});
+
+router.get("/admin/payment-requests", async (_req, res, next) => {
+  try {
+    res.json({ requests: await listPaymentRequests() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/admin/payment-requests/:id/review", async (req, res, next) => {
+  try {
+    const requestId = z.string().uuid().parse(req.params.id);
+    const review = reviewSchema.parse(req.body);
+    const actor = currentAuthenticatedUser(res);
+    const result = await reviewPaymentRequest({
+      requestId,
+      actor,
+      decision: review.decision,
+      notes: review.notes,
+      context: requestAuditContext(req),
+    });
+    res.json(result);
   } catch (error) {
     sendAdminError(error, res, next);
   }
@@ -218,6 +265,10 @@ function sendAdminError(error: unknown, res: import("express").Response, next: i
   }
   if (error instanceof AccessStateError) {
     res.status(409).json({ error: error.message });
+    return;
+  }
+  if (error instanceof PaymentRequestError) {
+    res.status(error.statusCode).json({ error: error.message });
     return;
   }
   next(error);

@@ -15,6 +15,13 @@
       "when": 1787168870273,
       "tag": "0001_colorful_stryfe",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787239249431,
+      "tag": "0002_magical_gamma_corps",
+      "breakpoints": true
     }
   ]
 }

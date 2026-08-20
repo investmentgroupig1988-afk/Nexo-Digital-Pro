@@ -1,7 +1,9 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
+  integer,
   jsonb,
   numeric,
   pgTable,
@@ -149,6 +151,43 @@ export const payments = pgTable("payments", {
   index("payments_user_created_index").on(table.userId, table.createdAt),
 ]);
 
+/** Manual payment evidence and its administrative review lifecycle. */
+export const paymentRequests = pgTable("payment_requests", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  method: varchar("method", { length: 64 }).notNull(),
+  amount: numeric("amount", { precision: 18, scale: 8 }).notNull(),
+  currency: varchar("currency", { length: 8 }).notNull(),
+  declaredPaidAt: timestamp("declared_paid_at", { withTimezone: true }).notNull(),
+  referenceOrTxid: varchar("reference_or_txid", { length: 255 }).notNull(),
+  referenceFingerprint: varchar("reference_fingerprint", { length: 64 }).notNull(),
+  payerName: varchar("payer_name", { length: 160 }),
+  senderWallet: varchar("sender_wallet", { length: 128 }),
+  proofFileName: varchar("proof_file_name", { length: 160 }),
+  proofMimeType: varchar("proof_mime_type", { length: 64 }),
+  proofSize: integer("proof_size"),
+  // V1 keeps the bounded evidence in PostgreSQL so no private filesystem path
+  // is exposed and ephemeral application disks cannot lose a receipt.
+  proofDataBase64: text("proof_data_base64"),
+  status: varchar("status", { length: 32 }).notNull().default("PENDING"),
+  notes: text("notes"),
+  reviewedBy: text("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  createdAt,
+  updatedAt,
+}, (table) => [
+  index("payment_requests_user_created_index").on(table.userId, table.createdAt),
+  index("payment_requests_status_created_index").on(table.status, table.createdAt),
+  index("payment_requests_reviewer_index").on(table.reviewedBy),
+  uniqueIndex("payment_requests_approved_reference_unique")
+    .on(table.method, table.referenceFingerprint)
+    .where(sql`${table.status} = 'APPROVED'`),
+  check("payment_requests_amount_positive", sql`${table.amount} > 0`),
+  check("payment_requests_proof_size_valid", sql`${table.proofSize} IS NULL OR (${table.proofSize} > 0 AND ${table.proofSize} <= 5242880)`),
+  check("payment_requests_method_valid", sql`${table.method} IN ('MERCADO_PAGO_TRANSFER', 'USDT_TRC20')`),
+  check("payment_requests_status_valid", sql`${table.status} IN ('PENDING', 'APPROVED', 'REJECTED', 'NEEDS_REVIEW')`),
+]);
+
 export const subscriptions = pgTable("subscriptions", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
@@ -191,6 +230,9 @@ export const signals = pgTable("signals", {
 
 export const accessPlans = {
   foundersLifetime: "FOUNDERS_LIFETIME",
+  partner: "PARTNER",
+  tester: "TESTER",
+  complimentary: "COMPLIMENTARY",
   monthlyPro: "MONTHLY_PRO",
 } as const;
 
@@ -216,10 +258,28 @@ export const auditActions = {
   accessGranted: "ACCESS_GRANTED",
   accessRevoked: "ACCESS_REVOKED",
   accessRestored: "ACCESS_RESTORED",
+  paymentRequested: "PAYMENT_REQUESTED",
+  paymentApproved: "PAYMENT_APPROVED",
+  paymentRejected: "PAYMENT_REJECTED",
+  paymentNeedsReview: "PAYMENT_NEEDS_REVIEW",
   roleChanged: "ROLE_CHANGED",
+} as const;
+
+export const paymentRequestMethods = {
+  mercadoPagoTransfer: "MERCADO_PAGO_TRANSFER",
+  usdtTrc20: "USDT_TRC20",
+} as const;
+
+export const paymentRequestStatuses = {
+  pending: "PENDING",
+  approved: "APPROVED",
+  rejected: "REJECTED",
+  needsReview: "NEEDS_REVIEW",
 } as const;
 
 export type AccessPlan = (typeof accessPlans)[keyof typeof accessPlans];
 export type AccessGrantStatus = (typeof accessGrantStatuses)[keyof typeof accessGrantStatuses];
 export type AccessType = (typeof accessTypes)[keyof typeof accessTypes];
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];
+export type PaymentRequestMethod = (typeof paymentRequestMethods)[keyof typeof paymentRequestMethods];
+export type PaymentRequestStatus = (typeof paymentRequestStatuses)[keyof typeof paymentRequestStatuses];

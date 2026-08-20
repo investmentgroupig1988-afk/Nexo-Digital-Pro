@@ -11,8 +11,8 @@ export async function writeAuditLog(input: {
   action: AuditAction;
   metadata?: Record<string, string | number | boolean | null>;
   context?: AuditContext;
-}): Promise<void> {
-  await getDatabase().insert(auditLogs).values({
+}, database = getDatabase()): Promise<void> {
+  await database.insert(auditLogs).values({
     actorUserId: input.actorUserId ?? null,
     targetUserId: input.targetUserId ?? null,
     action: input.action,

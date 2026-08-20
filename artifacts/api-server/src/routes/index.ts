@@ -6,6 +6,7 @@ import signalRouter from "./signal";
 import authRouter from "./auth";
 import accountRouter from "./account";
 import adminRouter from "./admin";
+import paymentRequestsRouter from "./payment-requests";
 import { requireProductAccess } from "../auth/session";
 import { authRateLimit } from "../middlewares/security";
 
@@ -14,6 +15,7 @@ const router: IRouter = Router();
 router.use(healthRouter);
 router.use("/auth", authRateLimit, authRouter);
 router.use(accountRouter);
+router.use(paymentRequestsRouter);
 router.use(adminRouter);
 router.use(requireProductAccess(), historicalRouter);
 router.use(requireProductAccess(), marketRouter);

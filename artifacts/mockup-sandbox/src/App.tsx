@@ -17,6 +17,7 @@ function App() {
     queryFn: ({ signal }) => getAccount(signal),
     retry: false,
     staleTime: 60_000,
+    refetchInterval: (query) => query.state.data?.access.hasAccess ? false : 30_000,
   });
 
   const signedIn = account.data;

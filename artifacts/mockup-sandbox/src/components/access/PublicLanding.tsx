@@ -50,13 +50,13 @@ const steps = [
 
 const faqs = [
   ["¿Qué incluye mi acceso?", "El acceso Founders contempla el panel privado y las herramientas habilitadas para analizar BTC con indicadores, niveles, Fibonacci y estructura de mercado."],
-  ["¿El pago es realmente único?", "La oferta prevista para miembros Founders es de USD 27 en un único pago, sin suscripción mensual. El circuito de cobro todavía no está publicado en esta versión."],
+  ["¿El pago es realmente único?", "Sí. El acceso Founders se ofrece por USD 27 en un único pago, sin suscripción mensual para miembros Founders."],
   ["¿Nexo Digital Pro ejecuta operaciones?", "No. Nexo Digital Pro organiza información técnica; cada usuario decide si opera y ejecuta sus propias decisiones fuera de la plataforma."],
   ["¿Qué mercados están disponibles?", "BTC está disponible. XAUUSD permanece fuera de la oferta comercial y se mostrará como disponible únicamente cuando esté habilitado para lanzamiento."],
-  ["¿Cómo se activa mi cuenta después del pago?", "Cuando el circuito comercial esté habilitado, el equipo verificará la referencia, TXID o comprobante y activará el acceso correspondiente en tu cuenta."],
+  ["¿Cómo se activa mi cuenta después del pago?", "Desde tu cuenta creás una solicitud y cargás la referencia, TXID o comprobante. El equipo revisa el registro y, al aprobarlo, el sistema habilita el acceso Founders."],
   ["¿Puedo usar Nexo Digital Pro desde el celular?", "Sí. La experiencia está diseñada primero para celular y se adapta también a tablet y escritorio."],
-  ["¿Qué ocurre si tengo un problema con mi acceso?", "El flujo comercial incorporará el canal oficial de soporte y verificación, incluido WhatsApp cuando sus datos estén configurados. Nunca compartas contraseñas ni claves privadas."],
-  ["¿Puedo perder el acceso?", "Sí. El sistema permite bloquear o revocar el acceso cuando una incidencia requiera revisión. Las causas y el procedimiento deben definirse en los Términos y Condiciones antes de habilitar pagos."],
+  ["¿Qué ocurre si tengo un problema con mi acceso?", "Podés contactar al canal oficial de soporte y verificación por WhatsApp. Nunca compartas contraseñas, tokens, cookies ni claves privadas."],
+  ["¿Puedo perder el acceso?", "El acceso puede bloquearse o revocarse ante una incidencia de seguridad, fraude o incumplimiento que requiera revisión. Toda decisión queda registrada por el sistema."],
   ["¿Los análisis garantizan resultados?", "No. Todo análisis tiene riesgo y puede fallar. Los resultados históricos tampoco garantizan resultados futuros."],
 ] as const;
 
@@ -75,7 +75,7 @@ const legalDocuments: Record<LegalDocument, { title: string; body: string }> = {
   },
   contact: {
     title: "Contacto",
-    body: "El canal oficial de soporte, incluido el enlace de WhatsApp para ayuda y verificación, debe configurarse antes de habilitar el flujo comercial.",
+    body: "Canal oficial de soporte y verificación por WhatsApp: +54 9 11 5155-0781. Nunca envíes contraseñas, tokens, cookies ni claves privadas.",
   },
 };
 
@@ -131,7 +131,7 @@ export function PublicLanding({ onLogin, onRegister }: PublicLandingProps) {
               <p className="text-5xl font-semibold tracking-[-0.05em] text-white">USD 27</p>
               <p className="mt-1 text-sm text-slate-400">pago único</p>
               <button className="mt-6 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-violet-400 px-5 text-sm font-bold text-[#150c2d] transition hover:bg-violet-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-200" onClick={onRegister} type="button">Obtener acceso <ArrowRight className="h-4 w-4" /></button>
-              <p className="mt-3 text-xs leading-5 text-slate-500">El cobro todavía no está habilitado. Podés crear tu cuenta ahora.</p>
+              <p className="mt-3 text-xs leading-5 text-slate-500">Creá tu cuenta para elegir el método y cargar la evidencia del pago.</p>
             </div>
           </div>
         </section>
@@ -157,7 +157,7 @@ export function PublicLanding({ onLogin, onRegister }: PublicLandingProps) {
           <ol className="mt-12 border-t border-white/8">
             {steps.map(([title, description], index) => <Step description={description} index={index + 1} key={title} title={title} />)}
           </ol>
-          <p className="mt-6 max-w-2xl text-xs leading-5 text-slate-500">El flujo de pago, carga de comprobantes y soporte oficial por WhatsApp corresponde a una fase posterior y todavía no está habilitado en esta versión.</p>
+          <p className="mt-6 max-w-2xl text-xs leading-5 text-slate-500">La solicitud queda guardada antes de abrir WhatsApp. La validación administrativa en la plataforma es la fuente de verdad.</p>
         </section>
 
         <section aria-labelledby="mercados-title" className="pb-20 sm:pb-28">
@@ -193,7 +193,7 @@ export function PublicLanding({ onLogin, onRegister }: PublicLandingProps) {
           <div className="rounded-[1.75rem] border border-white/8 bg-[#0a0b12] px-5 py-12 text-center sm:px-10 sm:py-16">
             <Sparkles className="mx-auto h-6 w-6 text-violet-300" strokeWidth={1.7} />
             <h2 className="mx-auto mt-5 max-w-2xl text-3xl font-semibold tracking-[-0.04em] text-white sm:text-5xl">Creá tu cuenta y conocé Nexo Digital Pro</h2>
-            <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-slate-400 sm:text-base">Explorá el acceso disponible hoy y prepará tu cuenta para la apertura comercial.</p>
+            <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-slate-400 sm:text-base">Registrate, elegí tu método de pago y enviá la solicitud desde tu cuenta.</p>
             <div className="mx-auto mt-8 flex max-w-md flex-col justify-center gap-3 min-[430px]:flex-row">
               <PrimaryButton onClick={onRegister}>Crear cuenta</PrimaryButton>
               <SecondaryButton onClick={onLogin}>Iniciar sesión</SecondaryButton>
