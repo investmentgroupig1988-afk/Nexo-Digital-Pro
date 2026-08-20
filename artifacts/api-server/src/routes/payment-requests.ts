@@ -17,13 +17,17 @@ const proofSchema = z.object({
   mimeType: z.string().trim().min(1).max(100),
   dataBase64: z.string().min(1),
 });
-const createSchema = z.object({
+const optionalTrimmedString = (maxLength: number) => z.preprocess(
+  (value) => typeof value === "string" && value.trim() === "" ? undefined : value ?? undefined,
+  z.string().trim().max(maxLength).optional(),
+);
+export const createPaymentRequestSchema = z.object({
   method: z.enum([paymentRequestMethods.mercadoPagoTransfer, paymentRequestMethods.usdtTrc20]),
   amount: z.string().trim().min(1).max(32),
   declaredPaidAt: z.coerce.date(),
   referenceOrTxid: z.string().trim().min(3).max(255),
-  payerName: z.string().trim().max(160).optional(),
-  senderWallet: z.string().trim().max(128).optional(),
+  payerName: optionalTrimmedString(160),
+  senderWallet: optionalTrimmedString(128),
   proof: proofSchema.optional(),
 });
 
@@ -42,7 +46,7 @@ router.get("/payment-requests/me", async (_req, res, next) => {
 router.post("/payment-requests", async (req, res, next) => {
   try {
     const actor = currentAuthenticatedUser(res);
-    const input = createSchema.parse(req.body);
+    const input = createPaymentRequestSchema.parse(req.body);
     const created = await createPaymentRequest({ id: actor.id, email: actor.email, username: actor.displayUsername }, input, requestAuditContext(req));
     res.status(201).json(created);
   } catch (error) {

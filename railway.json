@@ -5,7 +5,7 @@
     "buildCommand": "corepack pnpm --filter @workspace/api-server run build"
   },
   "deploy": {
-    "startCommand": "corepack pnpm --filter @workspace/api-server run start",
+    "startCommand": "corepack pnpm db:migrate && corepack pnpm --filter @workspace/api-server run start",
     "healthcheckPath": "/api/healthz",
     "healthcheckTimeout": 100,
     "restartPolicyType": "on_failure",

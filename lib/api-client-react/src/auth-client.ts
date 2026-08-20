@@ -85,7 +85,7 @@ export type CreatePaymentRequestInput = {
   declaredPaidAt: string;
   referenceOrTxid: string;
   payerName?: string;
-  senderWallet?: string;
+  senderWallet?: string | null;
   proof?: { fileName: string; mimeType: string; dataBase64: string };
 };
 

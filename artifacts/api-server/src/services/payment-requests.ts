@@ -43,7 +43,7 @@ export type CreatePaymentRequestInput = {
   declaredPaidAt: Date;
   referenceOrTxid: string;
   payerName?: string;
-  senderWallet?: string;
+  senderWallet?: string | null;
   proof?: ProofInput;
 };
 
@@ -339,7 +339,7 @@ function normalizeInput(input: CreatePaymentRequestInput) {
   if (referenceOrTxid.length < 3 || referenceOrTxid.length > 255) throw new PaymentRequestError("La referencia o TXID no es válida.");
 
   const payerName = input.payerName?.trim() || null;
-  const senderWallet = input.senderWallet?.trim() || null;
+  const senderWallet = normalizeOptionalText(input.senderWallet);
   const proof = input.proof ? normalizeProof(input.proof) : null;
   if (method === paymentRequestMethods.mercadoPagoTransfer) {
     if (!payerName || payerName.length > 160) throw new PaymentRequestError("Ingresá el nombre del pagador.");
@@ -363,6 +363,11 @@ function normalizeInput(input: CreatePaymentRequestInput) {
     senderWallet,
     proof,
   };
+}
+
+function normalizeOptionalText(value: string | null | undefined): string | null {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
 }
 
 function normalizeAmount(value: string): string {

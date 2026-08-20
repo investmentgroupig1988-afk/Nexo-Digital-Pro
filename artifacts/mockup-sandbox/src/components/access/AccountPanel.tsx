@@ -115,7 +115,7 @@ function PaymentForm({ pending, error, onSubmit }: { pending: boolean; error: st
         declaredPaidAt: new Date(declaredPaidAt).toISOString(),
         referenceOrTxid: reference,
         payerName: isUsdt ? undefined : payerName,
-        senderWallet: isUsdt ? senderWallet || undefined : undefined,
+        senderWallet: isUsdt ? senderWallet.trim() || null : undefined,
         proof: encodedProof,
       });
     } catch (submitError) {

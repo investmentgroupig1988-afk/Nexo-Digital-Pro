@@ -197,6 +197,48 @@ describe("commercial access shell", () => {
     expect(api.createPaymentRequest).toHaveBeenCalledTimes(1);
   });
 
+  it("normalizes an omitted USDT sender wallet to null", async () => {
+    api.getAccount.mockResolvedValue(account(false));
+    api.createPaymentRequest.mockResolvedValue({ request: pendingRequest(), whatsappUrl: "https://wa.me/example" });
+    renderApp();
+    fireEvent.click(await screen.findByRole("button", { name: "Obtener acceso" }));
+    fireEvent.click(screen.getByRole("button", { name: /USDT TRC20/i }));
+    fireEvent.change(screen.getByLabelText("TXID"), { target: { value: "a".repeat(64) } });
+    fireEvent.change(screen.getByLabelText("Wallet remitente (opcional)"), { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: "SOLICITAR ACCESO" }));
+
+    await waitFor(() => expect(api.createPaymentRequest).toHaveBeenCalledTimes(1));
+    expect(api.createPaymentRequest.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ senderWallet: null }));
+  });
+
+  it("trims an informed valid USDT sender wallet before submission", async () => {
+    const wallet = "TJmF8D7twrHckM1LfqPwh64WgYcSgURKRS";
+    api.getAccount.mockResolvedValue(account(false));
+    api.createPaymentRequest.mockResolvedValue({ request: { ...pendingRequest(), senderWallet: wallet }, whatsappUrl: "https://wa.me/example" });
+    renderApp();
+    fireEvent.click(await screen.findByRole("button", { name: "Obtener acceso" }));
+    fireEvent.click(screen.getByRole("button", { name: /USDT TRC20/i }));
+    fireEvent.change(screen.getByLabelText("TXID"), { target: { value: "b".repeat(64) } });
+    fireEvent.change(screen.getByLabelText("Wallet remitente (opcional)"), { target: { value: `  ${wallet}  ` } });
+    fireEvent.click(screen.getByRole("button", { name: "SOLICITAR ACCESO" }));
+
+    await waitFor(() => expect(api.createPaymentRequest).toHaveBeenCalledTimes(1));
+    expect(api.createPaymentRequest.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ senderWallet: wallet }));
+  });
+
+  it("shows the API validation error for an invalid informed USDT wallet", async () => {
+    api.getAccount.mockResolvedValue(account(false));
+    api.createPaymentRequest.mockRejectedValue(new Error("HTTP 400 Bad Request: La wallet remitente de TRC20 no es válida."));
+    renderApp();
+    fireEvent.click(await screen.findByRole("button", { name: "Obtener acceso" }));
+    fireEvent.click(screen.getByRole("button", { name: /USDT TRC20/i }));
+    fireEvent.change(screen.getByLabelText("TXID"), { target: { value: "c".repeat(64) } });
+    fireEvent.change(screen.getByLabelText("Wallet remitente (opcional)"), { target: { value: "invalid-wallet" } });
+    fireEvent.click(screen.getByRole("button", { name: "SOLICITAR ACCESO" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe("La wallet remitente de TRC20 no es válida.");
+  });
+
   it("enables WhatsApp for an existing pending request without offering or creating a duplicate", async () => {
     api.getAccount.mockResolvedValue(account(false));
     api.getMyPaymentRequests.mockResolvedValue({ requests: [pendingRequest()] });

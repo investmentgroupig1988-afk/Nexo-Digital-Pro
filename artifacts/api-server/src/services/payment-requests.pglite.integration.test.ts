@@ -39,6 +39,11 @@ const identities = {
   rejected: identity("rejected", "user"),
   review: identity("review", "user"),
   partner: identity("partner", "user"),
+  nullWallet: identity("null-wallet", "user"),
+  emptyWallet: identity("empty-wallet", "user"),
+  whitespaceWallet: identity("whitespace-wallet", "user"),
+  validWallet: identity("valid-wallet", "user"),
+  invalidWallet: identity("invalid-wallet", "user"),
 };
 
 before(async () => {
@@ -81,6 +86,38 @@ test("user creates a persisted request before receiving the complete WhatsApp me
     () => createPaymentRequest(identities.member, usdtRequest("c"), undefined, serviceDatabase),
     /Ya tenés una solicitud abierta/,
   );
+});
+
+test("USDT sender wallet is optional and normalizes null, empty, and whitespace values to null", async () => {
+  const cases = [
+    [identities.nullWallet, null],
+    [identities.emptyWallet, ""],
+    [identities.whitespaceWallet, "   \t  "],
+  ] as const;
+
+  for (const [user, senderWallet] of cases) {
+    const result = await createPaymentRequest(user, { ...usdtRequest(user.id[0]), senderWallet }, undefined, serviceDatabase);
+    assert.equal(result.request.senderWallet, null);
+    const [stored] = await database.select().from(paymentRequests).where(eq(paymentRequests.id, result.request.id));
+    assert.equal(stored.senderWallet, null);
+  }
+});
+
+test("USDT accepts and trims a valid TRON wallet", async () => {
+  const wallet = "TJmF8D7twrHckM1LfqPwh64WgYcSgURKRS";
+  const result = await createPaymentRequest(identities.validWallet, {
+    ...usdtRequest("d"),
+    senderWallet: `  ${wallet}  `,
+  }, undefined, serviceDatabase);
+  assert.equal(result.request.senderWallet, wallet);
+});
+
+test("USDT rejects an informed invalid TRON wallet without persisting a request", async () => {
+  await assert.rejects(
+    () => createPaymentRequest(identities.invalidWallet, { ...usdtRequest("e"), senderWallet: "not-a-tron-wallet" }, undefined, serviceDatabase),
+    /La wallet remitente de TRC20 no es válida/,
+  );
+  assert.equal((await database.select().from(paymentRequests).where(eq(paymentRequests.userId, identities.invalidWallet.id))).length, 0);
 });
 
 test("a user cannot approve and an administrator cannot review their own request", async () => {
