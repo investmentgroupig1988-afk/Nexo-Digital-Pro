@@ -13,6 +13,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
+import { PRODUCT_DISPLAY_NAME, PRODUCT_DISPLAY_NAME_UPPER, PRODUCT_MARK } from "@/config/product";
 
 type PublicLandingProps = {
   onLogin: () => void;
@@ -24,8 +25,8 @@ type LegalDocument = "terms" | "privacy" | "refunds" | "contact";
 
 const capabilities: Array<{ title: string; description: string; icon: Icon }> = [
   {
-    title: "Análisis técnico",
-    description: "Indicadores, Fibonacci y estructura de mercado organizados en una sola lectura.",
+    title: "Señales claras",
+    description: "Entrada, stop loss, take profit y relación riesgo/beneficio cuando existe una configuración válida.",
     icon: BarChart3,
   },
   {
@@ -34,8 +35,8 @@ const capabilities: Array<{ title: string; description: string; icon: Icon }> = 
     icon: Database,
   },
   {
-    title: "Señal técnica y contexto",
-    description: "Una lectura orientativa para BTC acompañada por indicadores y estructura, sin ejecutar operaciones.",
+    title: "Contexto real",
+    description: "Tendencia y contexto multitemporal para BTC, sin exponer ruido técnico ni ejecutar operaciones.",
     icon: Activity,
   },
 ];
@@ -45,17 +46,18 @@ const steps = [
   ["Elegí tu forma de pago", "Seleccioná la alternativa disponible para tu ubicación."],
   ["Enviá tu solicitud", "Adjuntá la referencia, TXID o comprobante solicitado."],
   ["Validamos el pago", "El equipo verifica la operación y habilita el acceso correspondiente."],
-  ["Entrá a Nexo Digital Pro", "Accedé al panel privado y a las herramientas habilitadas."],
+  [`Entrá a ${PRODUCT_DISPLAY_NAME}`, "Accedé al panel privado de señales."],
 ] as const;
 
 const faqs = [
-  ["¿Qué incluye mi acceso?", "El acceso Founders contempla el panel privado y las herramientas habilitadas para analizar BTC con indicadores, niveles, Fibonacci y estructura de mercado."],
+  ["¿Qué incluye mi acceso?", "El acceso Founders incluye el dashboard de señales de BTC, contexto multitemporal, métricas e historial real cuando estén disponibles."],
   ["¿El pago es realmente único?", "Sí. El acceso Founders se ofrece por USD 27 en un único pago, sin suscripción mensual para miembros Founders."],
   ["¿Nexo Digital Pro ejecuta operaciones?", "No. Nexo Digital Pro organiza información técnica; cada usuario decide si opera y ejecuta sus propias decisiones fuera de la plataforma."],
   ["¿Qué mercados están disponibles?", "BTC está disponible. XAUUSD permanece fuera de la oferta comercial y se mostrará como disponible únicamente cuando esté habilitado para lanzamiento."],
   ["¿Cómo se activa mi cuenta después del pago?", "Desde tu cuenta creás una solicitud y cargás la referencia, TXID o comprobante. El equipo revisa el registro y, al aprobarlo, el sistema habilita el acceso Founders."],
   ["¿Puedo usar Nexo Digital Pro desde el celular?", "Sí. La experiencia está diseñada primero para celular y se adapta también a tablet y escritorio."],
   ["¿Qué ocurre si tengo un problema con mi acceso?", "Podés contactar al canal oficial de soporte y verificación por WhatsApp. Nunca compartas contraseñas, tokens, cookies ni claves privadas."],
+  ["¿Es obligatorio usar WhatsApp?", "No. La solicitud queda guardada en la plataforma; WhatsApp es un canal opcional de soporte después de enviarla."],
   ["¿Puedo perder el acceso?", "El acceso puede bloquearse o revocarse ante una incidencia de seguridad, fraude o incumplimiento que requiera revisión. Toda decisión queda registrada por el sistema."],
   ["¿Los análisis garantizan resultados?", "No. Todo análisis tiene riesgo y puede fallar. Los resultados históricos tampoco garantizan resultados futuros."],
 ] as const;
@@ -98,11 +100,11 @@ export function PublicLanding({ onLogin, onRegister }: PublicLandingProps) {
       <div className="relative mx-auto w-full max-w-7xl px-5 sm:px-8 lg:px-12">
         <section className="pb-20 pt-14 sm:pb-28 sm:pt-20 lg:pb-32 lg:pt-24">
           <div className="max-w-5xl">
-            <Eyebrow>Panel de análisis</Eyebrow>
+            <Eyebrow>Señales de mercado</Eyebrow>
             <h1 className="mt-5 max-w-5xl text-[2.72rem] font-semibold leading-[0.98] tracking-[-0.045em] text-white min-[390px]:text-[3rem] sm:text-6xl lg:text-[5.3rem] lg:leading-[0.96]">
-              Analizá el mercado con más contexto, en un solo panel.
+              Señales claras para seguir BTC con más contexto.
             </h1>
-            <p className="mt-7 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg sm:leading-8">Nexo Digital Pro organiza indicadores técnicos, estructura de mercado y niveles relevantes con datos reales para ayudarte a evaluar el mercado con una lectura más clara.</p>
+            <p className="mt-7 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg sm:leading-8">{PRODUCT_DISPLAY_NAME} evalúa datos reales y muestra una señal solo cuando la configuración técnica cumple los criterios definidos.</p>
             <div className="mt-8 flex flex-col gap-3 min-[430px]:flex-row">
               <PrimaryButton onClick={onRegister}>Crear cuenta</PrimaryButton>
               <SecondaryButton onClick={onLogin}>Ya tengo cuenta</SecondaryButton>
@@ -137,7 +139,7 @@ export function PublicLanding({ onLogin, onRegister }: PublicLandingProps) {
         </section>
 
         <section aria-labelledby="preview-title" className="py-20 sm:py-28">
-          <SectionHeading eyebrow="Producto real" id="preview-title" title="Todo el contexto técnico, reunido." description="Una vista previa estructural del panel privado. Las cotizaciones y los valores se consultan desde el producto, no se inventan en esta demostración." />
+          <SectionHeading eyebrow="Producto real" id="preview-title" title="La señal primero. El contexto, después." description="Una vista previa estructural del panel privado. Las señales, métricas y resultados se calculan desde datos persistidos; esta presentación no inventa valores." />
           <ProductPreview />
         </section>
 
@@ -175,7 +177,7 @@ export function PublicLanding({ onLogin, onRegister }: PublicLandingProps) {
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-200/80">Aviso legal y de riesgo</p>
               <h2 className="mt-2 text-xl font-semibold text-white sm:text-2xl" id="riesgo-title">Las decisiones y el riesgo siguen bajo tu control.</h2>
               <div className="mt-4 space-y-3 text-sm leading-6 text-slate-300 sm:text-base sm:leading-7">
-                <p>Nexo Digital Pro brinda información técnica y no constituye asesoramiento financiero. No garantiza ganancias y los resultados históricos no garantizan resultados futuros.</p>
+                <p>{PRODUCT_DISPLAY_NAME} brinda señales informativas y herramientas técnicas; no constituye asesoramiento financiero. No garantiza ganancias y los resultados históricos no garantizan resultados futuros.</p>
                 <p>Vos decidís si operás. Nexo Digital Pro no ejecuta operaciones, no administra fondos y no abre ni cierra posiciones por el usuario.</p>
               </div>
             </div>
@@ -223,7 +225,7 @@ export function PublicLanding({ onLogin, onRegister }: PublicLandingProps) {
 }
 
 export function Brand() {
-  return <div className="flex min-w-0 items-center gap-2.5"><div aria-hidden="true" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-violet-300/25 bg-violet-500/10 text-sm font-bold text-violet-100">N</div><p className="max-w-[9.5rem] text-[0.68rem] font-bold leading-4 tracking-[0.16em] text-white min-[390px]:max-w-none min-[390px]:text-xs sm:text-sm">NEXO DIGITAL PRO</p></div>;
+  return <div className="flex min-w-0 items-center gap-2.5"><div aria-hidden="true" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-violet-300/25 bg-violet-500/10 text-sm font-bold text-violet-100">{PRODUCT_MARK}</div><p className="max-w-[9.5rem] text-[0.68rem] font-bold leading-4 tracking-[0.16em] text-white min-[390px]:max-w-none min-[390px]:text-xs sm:text-sm">{PRODUCT_DISPLAY_NAME_UPPER}</p></div>;
 }
 
 function Eyebrow({ children }: { children: string }) {

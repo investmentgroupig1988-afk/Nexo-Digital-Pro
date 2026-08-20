@@ -102,6 +102,7 @@ export type SignalDashboardResponse = {
   evaluation: "LONG" | "SHORT" | "NO_SIGNAL";
   message: string | null;
   context: { trend: "bullish" | "bearish" | "sideways" | null; condition: "trending" | "mixed" | "insufficient_data"; strength: "high" | "medium" | "low" };
+  multiTimeframe: { trends: Record<string, "bullish" | "bearish" | "sideways" | null>; alignedCount: number; total: number };
   metrics: { total: number; wins: number; losses: number; winRate: number | null; lossRate: number | null; accumulatedReturnPct: number | null };
   history: CommercialSignal[];
 };
@@ -149,8 +150,8 @@ export function createPaymentRequest(input: CreatePaymentRequestInput): Promise<
   return customFetch("/api/payment-requests", { ...jsonRequest, method: "POST", body: JSON.stringify(input) });
 }
 
-export function getSignalDashboard(timeframe = "15m", signal?: AbortSignal): Promise<SignalDashboardResponse> {
-  return customFetch(`/api/signals/dashboard?symbol=BTCUSDT&timeframe=${encodeURIComponent(timeframe)}`, { responseType: "json", signal });
+export function getSignalDashboard(timeframe = "15m", historyTimeframe = timeframe, signal?: AbortSignal): Promise<SignalDashboardResponse> {
+  return customFetch(`/api/signals/dashboard?symbol=BTCUSDT&timeframe=${encodeURIComponent(timeframe)}&historyTimeframe=${encodeURIComponent(historyTimeframe)}`, { responseType: "json", signal });
 }
 
 export function getAdminPaymentRequests(signal?: AbortSignal): Promise<{ requests: AdminPaymentRequest[] }> {

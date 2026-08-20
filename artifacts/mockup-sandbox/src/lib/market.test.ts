@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  MARKET_TIMEFRAMES,
   formatDirection,
   formatNumber,
   formatStructure,
@@ -21,7 +22,7 @@ describe("market presentation", () => {
   });
 
   it("uses a bounded refresh interval for every supported timeframe", () => {
-    expect(refreshIntervalFor("1m")).toBe(30_000);
+    expect(MARKET_TIMEFRAMES).not.toContain("1m");
     expect(refreshIntervalFor("4h")).toBe(600_000);
   });
 });

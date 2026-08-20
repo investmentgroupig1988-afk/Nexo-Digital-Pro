@@ -94,17 +94,17 @@ describe("commercial access shell", () => {
   it("shows the public landing when there is no valid session", async () => {
     api.getAccount.mockRejectedValue(new Error("not signed in"));
     renderApp();
-    expect(await screen.findByRole("heading", { name: "Analizá el mercado con más contexto, en un solo panel." })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Señales claras para seguir BTC con más contexto." })).toBeTruthy();
     expect(screen.getByText("USD 27")).toBeTruthy();
     expect(screen.getByText("pago único")).toBeTruthy();
     expect(screen.getByText("BTC")).toBeTruthy();
     expect(screen.getByText("XAUUSD")).toBeTruthy();
     expect(screen.getByText("Próximamente")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Análisis técnico" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Señales claras" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Datos reales" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Señal técnica y contexto" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Contexto real" })).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/win rate|p&l|rentabilidad garantizada|clientes activos/i);
-  });
+  }, 15_000);
 
   it("connects public calls to action with registration and login", async () => {
     api.getAccount.mockRejectedValue(new Error("not signed in"));

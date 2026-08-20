@@ -30,6 +30,22 @@ test("LOSS is recorded when SL is reached before TP", () => {
   assert.equal(resolveSignal(lifecycle(), [candleAt(1, 100, 105, 89, 92)]).status, "LOSS");
 });
 
+test("expiration prevents later candles from changing the result", () => {
+  const signal = { ...lifecycle(), expiresAt: new Date(2 * 60_000) };
+  const result = resolveSignal(signal, [candleAt(1, 100, 105, 95, 102), candleAt(3, 102, 120, 101, 118)], new Date(4 * 60_000));
+  assert.equal(result.status, "EXPIRED");
+  assert.equal(result.closedAt?.getTime(), signal.expiresAt.getTime());
+  assert.equal(result.returnPct, 2);
+});
+
+test("bullish, bearish, and sideways classifications remain context rather than forced signals", () => {
+  for (const value of ["bullish", "bearish", "sideways"] as const) {
+    const result = evaluateSignal({ symbol: "BTCUSDT", timeframe: "15m", candles: candles(), technical: technical({ trend: value, structure: "mixed" }) });
+    assert.equal(result.context.trend, value);
+    assert.equal(result.outcome, "NO_SIGNAL");
+  }
+});
+
 function lifecycle() { return { direction: "LONG" as const, entryPrice: 100, stopLoss: 90, takeProfit: 115, openedAt: new Date(0), expiresAt: new Date(10_000_000) }; }
 function candleAt(minutes: number, open: number, high: number, low: number, close: number): HistoricalCandle { return { timestamp: new Date(minutes * 60_000).toISOString(), open, high, low, close, volume: 100 }; }
 function candles(): HistoricalCandle[] { return Array.from({ length: 200 }, (_, index) => candleAt(index + 1, 99 + index / 200, 101, 98, index === 199 ? 100 : 99 + index / 200)); }

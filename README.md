@@ -1,6 +1,6 @@
 # Nexo Digital Pro
 
-Nexo Digital Pro es una aplicación React/Vite y API Express para análisis técnico de `BTCUSDT` y `XAUUSD`. Binance y Twelve Data se consultan únicamente desde el backend; el frontend no contiene claves de mercado ni muestra un gráfico de velas. El producto ofrece información técnica, no asesoramiento financiero, y no ejecuta operaciones.
+Nexo Digital Pro es una aplicación React/Vite y API Express con dashboard comercial de señales persistidas para `BTCUSDT`. El motor usa datos reales e indicadores internos, no fuerza señales y no ejecuta operaciones. `XAUUSD` permanece bloqueado como próximo mercado.
 
 ## Arquitectura actual
 
@@ -79,4 +79,4 @@ corepack pnpm run test
 
 ## Alcance pendiente
 
-Las tablas `payments`, `subscriptions` y `signals` existen sólo para preparar integraciones futuras. Esta versión no incorpora cobros, Stripe, Mercado Pago, USDT, WhatsApp, IA, usuarios de partner, señales automatizadas, paper trading ni trading real.
+La versión actual incorpora solicitudes manuales de pago, grants comerciales y señales persistidas con resolución e historial. No incorpora Stripe, ejecución automática, copy trading, paper trading ni conexión con cuentas del usuario.

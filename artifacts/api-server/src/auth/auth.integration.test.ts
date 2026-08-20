@@ -99,6 +99,7 @@ if (!testDatabaseUrl || !integrationEnabled) {
     assert.equal((await (await request("/api/me", { headers: { cookie: memberCookie } })).json() as { user: { role: string } }).user.role, "user");
     assert.equal((await request("/api/admin/users", { headers: { cookie: memberCookie } })).status, 403);
     assert.notEqual((await request("/api/signals/dashboard", { headers: { cookie: memberCookie } })).status, 403);
+    assert.equal((await request("/api/signals/dashboard?symbol=XAUUSD", { headers: { cookie: memberCookie } })).status, 423);
 
     const revoke = await request(`/api/admin/users/${memberId}/revoke-access`, { method: "POST", headers: { cookie: adminCookie }, body: JSON.stringify({ reason: "integration test" }) });
     assert.equal(revoke.status, 200);

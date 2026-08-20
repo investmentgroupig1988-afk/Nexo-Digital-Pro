@@ -3,7 +3,7 @@
 Este repositorio despliega dos servicios independientes:
 
 ```text
-GitHub (main / staging)
+GitHub (main / deploy-ready-v1)
   -> Railway: API Express
   -> Vercel: frontend Vite
   -> navegador: frontend -> API pública HTTPS
@@ -32,7 +32,7 @@ La versión de Node se fija en `>=24 <25` y pnpm queda fijado mediante `packageM
 | Railway staging/producción | `PORT` | No crearla manualmente: Railway la proporciona. |
 | Railway staging/producción | `CORS_ALLOWED_ORIGINS` | Origin HTTPS exacto del frontend Vercel correspondiente, sin ruta final. |
 | Railway staging/producción | `TRUST_PROXY_HOPS` | `1`. |
-| Railway staging/producción | `TWELVEDATA_API_KEY` | Sólo si debe funcionar `XAUUSD`; secreto de servidor. |
+| Railway staging/producción | `TWELVEDATA_API_KEY` | No es necesaria para la V1 comercial; XAUUSD permanece bloqueado. |
 | Vercel staging/producción | `VITE_API_BASE_URL` | Origin HTTPS exacto del backend Railway correspondiente, sin ruta final. Es público. |
 
 `CORS_ORIGINS` continúa funcionando como alias de compatibilidad, pero usar `CORS_ALLOWED_ORIGINS` en configuraciones nuevas. Se admiten varios origins separados por coma. Cada valor se valida como un origin `http(s)` sin paths, credenciales, query ni hash; no se aceptan comodines.
@@ -46,7 +46,7 @@ En el dashboard, confirmar estos valores (también están declarados en `railway
 | Campo | Valor exacto |
 | --- | --- |
 | Build Command | `corepack pnpm --filter @workspace/api-server run build` |
-| Start Command | `corepack pnpm --filter @workspace/api-server run start` |
+| Start Command | `corepack pnpm db:migrate && corepack pnpm --filter @workspace/api-server run start` |
 | Healthcheck Path | `/api/healthz` |
 | Healthcheck Timeout | `100` |
 | Restart policy | `on_failure`, hasta `10` reintentos |
@@ -57,7 +57,7 @@ En esta primera instancia todavía se puede dejar `CORS_ALLOWED_ORIGINS` vacío 
 
 ## Staging: Vercel frontend
 
-Crear un proyecto Vercel separado para staging desde el mismo repositorio, con la rama de producción del proyecto apuntando a `staging`. Usar **Root Directory: `.`**, no `artifacts/mockup-sandbox`: el frontend depende de workspaces en `lib/`, que Vercel no puede leer si su root se limita al subdirectorio.
+Crear un proyecto Vercel separado para staging desde el mismo repositorio, con la rama de producción del proyecto apuntando a `deploy-ready-v1`. Usar **Root Directory: `.`**, no `artifacts/mockup-sandbox`: el frontend depende de workspaces en `lib/`, que Vercel no puede leer si su root se limita al subdirectorio.
 
 Usar estos ajustes exactos, ya fijados también en `vercel.json`:
 
@@ -78,13 +78,15 @@ VITE_API_BASE_URL=https://<backend-staging>.up.railway.app
 
 No crear en Vercel `TWELVEDATA_API_KEY`, `CORS_ALLOWED_ORIGINS`, `PORT`, tokens ni credenciales. Volver a desplegar el frontend después de modificar una variable `VITE_*`, porque Vite la incorpora durante el build.
 
-Cuando Vercel asigne el dominio estable de staging, por ejemplo `https://<frontend-staging>.vercel.app`, volver a Railway y definir:
+Usar el alias estable de la rama, no la URL efímera de cada deployment. Para el proyecto actual, volver a Railway y definir:
 
 ```text
-CORS_ALLOWED_ORIGINS=https://<frontend-staging>.vercel.app
+CORS_ALLOWED_ORIGINS=https://nexo-digital-pro-git-deploy-ready-v1-nexo-digital5.vercel.app
 ```
 
-Re-desplegar Railway. La aplicación de staging ya puede llamar a la API desde el navegador. Los previews de pull requests tienen URLs variables y no se habilitan automáticamente; no usar `*` para CORS. Agregar un origin individual sólo si se decide mantener un preview específico.
+Re-desplegar Railway. Los previews efímeros no se habilitan automáticamente; no usar `*`, regex amplias ni reflexión del header `Origin` cuando hay cookies. Agregar otro origin exacto sólo si se decide mantener un preview específico.
+
+Para la producción prevista, usar exactamente `CORS_ALLOWED_ORIGINS=https://www.nexodigitalpro.lat` en Railway y `VITE_API_BASE_URL=https://api.nexodigitalpro.lat` en Vercel.
 
 ## Smoke test de staging
 
@@ -115,8 +117,8 @@ No se incluyen dominios, proyectos, IDs ni credenciales de cuenta en el reposito
 - [ ] El frontend carga por HTTPS sin contenido mixto.
 - [ ] `VITE_API_BASE_URL` apunta al backend del mismo entorno.
 - [ ] `CORS_ALLOWED_ORIGINS` contiene sólo el origin HTTPS exacto del frontend.
-- [ ] BTCUSDT, velas e indicadores responden desde la interfaz.
-- [ ] XAUUSD se considera disponible sólo si Railway tiene `TWELVEDATA_API_KEY` válida y el proveedor lo permite.
+- [ ] BTCUSDT y el dashboard de señales responden desde la interfaz.
+- [ ] XAUUSD permanece bloqueado en frontend y backend.
 - [ ] No hay secretos en GitHub, Vercel ni logs del navegador.
 - [ ] Los logs de Railway no revelan tokens ni valores completos de headers sensibles.
 - [ ] Rate limiting, headers defensivos y healthcheck siguen activos.

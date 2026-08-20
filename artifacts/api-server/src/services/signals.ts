@@ -10,6 +10,8 @@ export async function buildSignalDashboard(input: {
   timeframe: HistoricalTimeframe;
   candles: HistoricalCandle[];
   technical: TechnicalAnalysisResult;
+  historyTimeframe?: string | null;
+  multiTimeframe?: Record<string, "bullish" | "bearish" | "sideways" | null>;
   now?: Date;
 }, database: SignalDatabase = getDatabase()) {
   await resolveOpenSignals(input.symbol, input.timeframe, input.candles, input.now ?? new Date(), database);
@@ -47,17 +49,22 @@ export async function buildSignalDashboard(input: {
 
   const historyRows = await database.select().from(signals)
     .orderBy(desc(signals.openedAt), desc(signals.createdAt)).limit(100);
-  const settled = historyRows.filter((signal) => signal.status === "WIN" || signal.status === "LOSS");
+  const scopedRows = input.historyTimeframe ? historyRows.filter((signal) => signal.timeframe === input.historyTimeframe) : historyRows;
+  const settled = scopedRows.filter((signal) => signal.status === "WIN" || signal.status === "LOSS");
   const wins = settled.filter((signal) => signal.status === "WIN").length;
   const losses = settled.filter((signal) => signal.status === "LOSS").length;
   const total = settled.length;
   const accumulatedReturnPct = total ? settled.reduce((sum, signal) => sum + Number(signal.returnPct ?? 0), 0) : null;
 
+  const trends = Object.values(input.multiTimeframe ?? {}).filter((trend): trend is "bullish" | "bearish" | "sideways" => trend !== null);
+  const directional = trends.filter((trend) => trend !== "sideways");
+  const alignedCount = directional.length ? Math.max(directional.filter((trend) => trend === "bullish").length, directional.filter((trend) => trend === "bearish").length) : 0;
   return {
     activeSignal: active ? publicSignal(active) : null,
     evaluation: active ? active.direction : "NO_SIGNAL",
     message: active ? null : "Esperando una configuración válida.",
     context: evaluation.context,
+    multiTimeframe: { trends: input.multiTimeframe ?? {}, alignedCount, total: trends.length },
     metrics: {
       total,
       wins,
@@ -66,7 +73,7 @@ export async function buildSignalDashboard(input: {
       lossRate: total ? round((losses / total) * 100) : null,
       accumulatedReturnPct: accumulatedReturnPct === null ? null : round(accumulatedReturnPct),
     },
-    history: historyRows.filter((signal) => signal.status !== "OPEN").slice(0, 50).map(publicSignal),
+    history: scopedRows.filter((signal) => signal.status !== "OPEN").slice(0, 50).map(publicSignal),
   };
 }
 

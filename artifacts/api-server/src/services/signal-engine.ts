@@ -5,6 +5,7 @@ import type { TechnicalAnalysisResult } from "./technical";
 export const SIGNAL_STRATEGY_VERSION = "NEXO_CONFLUENCE_V1";
 export const MINIMUM_RISK_REWARD = 1.5;
 export const SIGNAL_EXPIRATION_CANDLES = 12;
+export const COMMERCIAL_SIGNAL_TIMEFRAMES = ["5m", "15m", "1h", "4h"] as const;
 
 export type SignalDirection = "LONG" | "SHORT";
 export type SignalEvaluation =

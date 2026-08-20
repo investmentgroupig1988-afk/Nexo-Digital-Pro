@@ -11,9 +11,9 @@ import { buildSignalDashboard } from "./signals";
 import type { TechnicalAnalysisResult } from "./technical";
 
 let client: PGlite; let database: ReturnType<typeof drizzle>; let serviceDatabase: ReturnType<typeof getDatabase>;
-const userId = randomUUID(); const adminId = randomUUID();
+const userId = randomUUID(); const adminId = randomUUID(); const testerId = randomUUID(); const complimentaryId = randomUUID();
 
-before(async () => { client = new PGlite(); for (const file of (await readdir(resolve(import.meta.dirname, "../../../../lib/db/drizzle"))).filter((value) => /^\d+_.+\.sql$/.test(value)).sort()) { for (const statement of (await readFile(resolve(import.meta.dirname, "../../../../lib/db/drizzle", file), "utf8")).split("--> statement-breakpoint")) if (statement.trim()) await client.exec(statement); } database = drizzle(client, { schema: { accessGrants, signals, users } }); serviceDatabase = database as unknown as ReturnType<typeof getDatabase>; await database.insert(users).values([{ id: userId, name: "User", email: "signal-user@example.test", username: "signal_user", displayUsername: "signal_user", role: "user" }, { id: adminId, name: "Admin", email: "signal-admin@example.test", username: "signal_admin", displayUsername: "signal_admin", role: "admin" }]); });
+before(async () => { client = new PGlite(); for (const file of (await readdir(resolve(import.meta.dirname, "../../../../lib/db/drizzle"))).filter((value) => /^\d+_.+\.sql$/.test(value)).sort()) { for (const statement of (await readFile(resolve(import.meta.dirname, "../../../../lib/db/drizzle", file), "utf8")).split("--> statement-breakpoint")) if (statement.trim()) await client.exec(statement); } database = drizzle(client, { schema: { accessGrants, signals, users } }); serviceDatabase = database as unknown as ReturnType<typeof getDatabase>; await database.insert(users).values([{ id: userId, name: "User", email: "signal-user@example.test", username: "signal_user", displayUsername: "signal_user", role: "user" }, { id: adminId, name: "Admin", email: "signal-admin@example.test", username: "signal_admin", displayUsername: "signal_admin", role: "admin" }, { id: testerId, name: "Tester", email: "signal-tester@example.test", username: "signal_tester", displayUsername: "signal_tester", role: "user" }, { id: complimentaryId, name: "Courtesy", email: "signal-courtesy@example.test", username: "signal_courtesy", displayUsername: "signal_courtesy", role: "user" }]); });
 after(async () => client.close());
 
 test("product access requires an active grant and admin role alone does not grant it", async () => {
@@ -21,15 +21,23 @@ test("product access requires an active grant and admin role alone does not gran
   assert.equal((await getEffectiveAccess(adminId, serviceDatabase)).hasAccess, false);
   await database.insert(accessGrants).values({ userId, plan: "PARTNER", accessType: "PROMOTION", status: "active", grantedAt: new Date() });
   assert.equal((await getEffectiveAccess(userId, serviceDatabase)).hasAccess, true);
+  await database.insert(accessGrants).values([{ userId: testerId, plan: "TESTER", accessType: "PROMOTION", status: "active", grantedAt: new Date() }, { userId: complimentaryId, plan: "COMPLIMENTARY", accessType: "PROMOTION", status: "active", grantedAt: new Date() }]);
+  assert.equal((await getEffectiveAccess(testerId, serviceDatabase)).hasAccess, true);
+  assert.equal((await getEffectiveAccess(complimentaryId, serviceDatabase)).hasAccess, true);
 });
 
-test("signal persistence is idempotent and empty history never invents metrics", async () => {
+test("signal persistence remains idempotent across repeated evaluations and simulated restarts", async () => {
   const now = new Date("2026-01-01T03:20:00.000Z");
   const weak = await buildSignalDashboard({ symbol: "BTCUSDT", timeframe: "1h", candles: candles(), technical: technical("sideways"), now }, serviceDatabase);
   assert.deepEqual(weak.metrics, { total: 0, wins: 0, losses: 0, winRate: null, lossRate: null, accumulatedReturnPct: null });
   await buildSignalDashboard({ symbol: "BTCUSDT", timeframe: "15m", candles: candles(), technical: technical("bullish"), now }, serviceDatabase);
   await buildSignalDashboard({ symbol: "BTCUSDT", timeframe: "15m", candles: candles(), technical: technical("bullish"), now }, serviceDatabase);
   assert.equal((await database.select().from(signals)).filter((value) => value.status === "OPEN").length, 1);
+  await buildSignalDashboard({ symbol: "BTCUSDT", timeframe: "15m", candles: candles(), technical: technical("sideways"), now: new Date("2026-01-01T07:00:00.000Z") }, serviceDatabase);
+  const matching = (await database.select().from(signals)).filter((value) => value.timeframe === "15m");
+  assert.equal(matching.length, 1);
+  assert.equal(matching[0].status, "EXPIRED");
+  assert.ok(matching[0].closedAt);
 });
 
 test("performance metrics are calculated only from real settled rows", async () => {
@@ -37,6 +45,8 @@ test("performance metrics are calculated only from real settled rows", async () 
   await database.insert(signals).values([{ ...common, status: "WIN", result: "WIN", returnPct: "15", configurationFingerprint: "w".repeat(64) }, { ...common, status: "LOSS", result: "LOSS", returnPct: "-10", configurationFingerprint: "l".repeat(64) }]);
   const result = await buildSignalDashboard({ symbol: "BTCUSDT", timeframe: "4h", candles: candles(), technical: technical("sideways"), now }, serviceDatabase);
   assert.deepEqual(result.metrics, { total: 2, wins: 1, losses: 1, winRate: 50, lossRate: 50, accumulatedReturnPct: 5 });
+  const filtered = await buildSignalDashboard({ symbol: "BTCUSDT", timeframe: "4h", candles: candles(), technical: technical("sideways"), historyTimeframe: "15m", now }, serviceDatabase);
+  assert.deepEqual(filtered.metrics, { total: 0, wins: 0, losses: 0, winRate: null, lossRate: null, accumulatedReturnPct: null });
 });
 
 function candles() { return Array.from({ length: 200 }, (_, index) => ({ timestamp: new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString(), open: 99, high: 101, low: 98, close: index === 199 ? 100 : 99, volume: 120 })); }

@@ -3,8 +3,10 @@ import { config } from "./config";
 import { logger } from "./lib/logger";
 import { startMarketRefresh, stopMarketRefresh } from "./services/market-cache";
 import { closeDatabase } from "@workspace/db";
+import { startSignalRefresh, stopSignalRefresh } from "./services/signal-refresh";
 
 startMarketRefresh();
+startSignalRefresh();
 
 const server = app.listen(config.port, () => {
   logger.info({ port: config.port }, "Server listening");
@@ -22,6 +24,7 @@ function shutdown(signal: NodeJS.Signals): void {
   shuttingDown = true;
   logger.info({ signal }, "Shutting down API server");
   stopMarketRefresh();
+  stopSignalRefresh();
   server.close(async (error) => {
     if (error) {
       logger.error({ err: error }, "Error while closing API server");

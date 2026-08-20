@@ -1,7 +1,7 @@
 export const MARKET_SYMBOLS = ["BTCUSDT", "XAUUSD"] as const;
 export type MarketSymbol = (typeof MARKET_SYMBOLS)[number];
 
-export const MARKET_TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h"] as const;
+export const MARKET_TIMEFRAMES = ["5m", "15m", "1h", "4h"] as const;
 export type MarketTimeframe = (typeof MARKET_TIMEFRAMES)[number];
 
 export function isMarketSymbol(value: string): value is MarketSymbol {
@@ -99,7 +99,6 @@ export function formatDirection(value: string | null): string {
 
 export function refreshIntervalFor(timeframe: MarketTimeframe): number {
   const intervals: Record<MarketTimeframe, number> = {
-    "1m": 30_000,
     "5m": 60_000,
     "15m": 120_000,
     "1h": 300_000,
