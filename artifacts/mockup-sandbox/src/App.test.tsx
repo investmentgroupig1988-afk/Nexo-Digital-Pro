@@ -77,6 +77,7 @@ describe("commercial access shell", () => {
     await screen.findByText("Founders Lifetime");
     fireEvent.click(screen.getByText("Abrir panel privado"));
     expect(await screen.findByText("Panel de análisis con acceso")).toBeTruthy();
+    expect(screen.queryByText("Admin")).toBeNull();
   });
 
   it("only exposes the administration navigation to a reported administrator", async () => {
@@ -85,5 +86,6 @@ describe("commercial access shell", () => {
     expect(await screen.findByText("Sin acceso privado")).toBeTruthy();
     fireEvent.click(screen.getByText("Admin"));
     expect(await screen.findByText("Administración protegida")).toBeTruthy();
+    expect(screen.queryByText("Panel de análisis con acceso")).toBeNull();
   });
 });

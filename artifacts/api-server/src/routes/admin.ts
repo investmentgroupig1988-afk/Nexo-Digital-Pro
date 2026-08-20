@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request } from "express";
 import { z } from "zod";
-import { and, auditActions, auditLogs, desc, eq, getDatabase, ilike, or, sessions, users } from "@workspace/db";
-import { currentAuthenticatedUser, requirePermission } from "../auth/session";
+import { auditActions, auditLogs, desc, eq, getDatabase, ilike, inArray, or, sessions, users } from "@workspace/db";
+import { currentAuthenticatedUser, requireAdminRole } from "../auth/session";
 import { trustedMutationOrigin } from "../middlewares/security";
 import { AccessStateError, getEffectiveAccess, grantLifetimeAccess, listAccessHistory, restoreAccess, revokeAccess } from "../services/access";
 import { writeAuditLog } from "../services/audit";
@@ -13,8 +13,9 @@ const reasonSchema = z.object({ reason: z.string().trim().max(500).optional() })
 const roleSchema = z.object({ role: z.enum(["user", "admin"]) });
 
 router.use(trustedMutationOrigin);
+router.use("/admin", requireAdminRole());
 
-router.get("/admin/users", requirePermission("users.read"), async (req, res, next) => {
+router.get("/admin/users", async (req, res, next) => {
   try {
     const query = z.object({
       q: z.string().trim().max(120).optional(),
@@ -48,7 +49,7 @@ router.get("/admin/users", requirePermission("users.read"), async (req, res, nex
   }
 });
 
-router.get("/admin/users/:id", requirePermission("users.read"), async (req, res, next) => {
+router.get("/admin/users/:id", async (req, res, next) => {
   try {
     const id = userIdSchema.parse(req.params.id);
     const user = await findUser(id);
@@ -66,7 +67,7 @@ router.get("/admin/users/:id", requirePermission("users.read"), async (req, res,
   }
 });
 
-router.post("/admin/users/:id/grant-access", requirePermission("access.grant"), async (req, res, next) => {
+router.post("/admin/users/:id/grant-access", async (req, res, next) => {
   try {
     const targetUserId = userIdSchema.parse(req.params.id);
     const input = reasonSchema.parse(req.body);
@@ -82,7 +83,7 @@ router.post("/admin/users/:id/grant-access", requirePermission("access.grant"), 
   }
 });
 
-router.post("/admin/users/:id/revoke-access", requirePermission("access.revoke"), async (req, res, next) => {
+router.post("/admin/users/:id/revoke-access", async (req, res, next) => {
   try {
     const targetUserId = userIdSchema.parse(req.params.id);
     const input = reasonSchema.parse(req.body);
@@ -94,7 +95,7 @@ router.post("/admin/users/:id/revoke-access", requirePermission("access.revoke")
   }
 });
 
-router.post("/admin/users/:id/restore-access", requirePermission("access.grant"), async (req, res, next) => {
+router.post("/admin/users/:id/restore-access", async (req, res, next) => {
   try {
     const targetUserId = userIdSchema.parse(req.params.id);
     const input = reasonSchema.parse(req.body);
@@ -106,7 +107,7 @@ router.post("/admin/users/:id/restore-access", requirePermission("access.grant")
   }
 });
 
-router.post("/admin/users/:id/block", requirePermission("users.block"), async (req, res, next) => {
+router.post("/admin/users/:id/block", async (req, res, next) => {
   try {
     const targetUserId = userIdSchema.parse(req.params.id);
     const input = reasonSchema.parse(req.body);
@@ -128,7 +129,7 @@ router.post("/admin/users/:id/block", requirePermission("users.block"), async (r
   }
 });
 
-router.post("/admin/users/:id/unblock", requirePermission("users.block"), async (req, res, next) => {
+router.post("/admin/users/:id/unblock", async (req, res, next) => {
   try {
     const targetUserId = userIdSchema.parse(req.params.id);
     const input = reasonSchema.parse(req.body);
@@ -145,7 +146,7 @@ router.post("/admin/users/:id/unblock", requirePermission("users.block"), async 
   }
 });
 
-router.post("/admin/users/:id/role", requirePermission("admins.manage"), async (req, res, next) => {
+router.post("/admin/users/:id/role", async (req, res, next) => {
   try {
     const targetUserId = userIdSchema.parse(req.params.id);
     const input = roleSchema.parse(req.body);
@@ -166,11 +167,20 @@ router.post("/admin/users/:id/role", requirePermission("admins.manage"), async (
   }
 });
 
-router.get("/admin/audit", requirePermission("analytics.read"), async (req, res, next) => {
+router.get("/admin/audit", async (req, res, next) => {
   try {
     const limit = z.coerce.number().int().min(1).max(200).default(100).parse(req.query.limit);
     const entries = await getDatabase().select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(limit);
-    res.json({ audit: entries });
+    const userIds = [...new Set(entries.flatMap((entry) => [entry.actorUserId, entry.targetUserId]).filter((id): id is string => Boolean(id)))];
+    const identities = userIds.length
+      ? await getDatabase().select({ id: users.id, username: users.displayUsername, email: users.email }).from(users).where(inArray(users.id, userIds))
+      : [];
+    const identityById = new Map(identities.map((identity) => [identity.id, { username: identity.username, email: identity.email }]));
+    res.json({ audit: entries.map((entry) => ({
+      ...entry,
+      actor: entry.actorUserId ? identityById.get(entry.actorUserId) ?? null : null,
+      target: entry.targetUserId ? identityById.get(entry.targetUserId) ?? null : null,
+    })) });
   } catch (error) {
     next(error);
   }

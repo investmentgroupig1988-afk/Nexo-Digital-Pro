@@ -83,6 +83,20 @@ export function requirePermission(permission: string) {
   };
 }
 
+/** Administration is an explicit role boundary, never a commercial grant. */
+export function requireAdminRole() {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const user = await getRequestUser(req);
+      if (user.role !== "admin") throw new AuthorizationError("Administrator role is required.");
+      res.locals.authUser = user;
+      next();
+    } catch (error) {
+      sendAuthError(error, res, next);
+    }
+  };
+}
+
 export function requireAuthenticatedUser() {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {

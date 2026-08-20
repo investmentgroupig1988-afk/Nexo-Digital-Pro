@@ -61,10 +61,12 @@ if (!testDatabaseUrl || !integrationEnabled) {
 
     const account = await request("/api/me", { headers: { cookie: memberCookie } });
     assert.equal(account.status, 200);
-    const body = await account.json() as { user: { id: string; username: string }; access: { hasAccess: boolean } };
+    const body = await account.json() as { user: { id: string; username: string; role: string }; access: { hasAccess: boolean } };
     memberId = body.user.id;
     assert.equal(body.user.username, member.username.toLowerCase());
     assert.equal(body.access.hasAccess, false);
+    assert.equal(body.user.role, "user");
+    assert.equal((await request("/api/admin/users", { headers: { cookie: memberCookie } })).status, 403);
   });
 
   test("incorrect credentials fail and a user without entitlement cannot use the private API", async () => {
@@ -82,20 +84,36 @@ if (!testDatabaseUrl || !integrationEnabled) {
     const { user } = await adminAccount.json() as { user: { id: string } };
     await getDatabase().update(users).set({ role: "admin" }).where(eq(users.id, user.id));
 
+    const adminAccountAfterPromotion = await request("/api/me", { headers: { cookie: adminCookie } });
+    const adminState = await adminAccountAfterPromotion.json() as { user: { role: string }; access: { hasAccess: boolean } };
+    assert.equal(adminState.user.role, "admin");
+    assert.equal(adminState.access.hasAccess, false);
+    assert.equal((await request("/api/market?symbol=BTCUSDT", { headers: { cookie: adminCookie } })).status, 403);
+
     const grant = await request(`/api/admin/users/${memberId}/grant-access`, { method: "POST", headers: { cookie: adminCookie }, body: JSON.stringify({ reason: "integration test" }) });
     assert.equal(grant.status, 201);
     const grantedAccess = await request("/api/access/me", { headers: { cookie: memberCookie } });
     assert.equal((await grantedAccess.json() as { access: { hasAccess: boolean } }).access.hasAccess, true);
+    assert.equal((await (await request("/api/me", { headers: { cookie: memberCookie } })).json() as { user: { role: string } }).user.role, "user");
+    assert.equal((await request("/api/admin/users", { headers: { cookie: memberCookie } })).status, 403);
 
     const revoke = await request(`/api/admin/users/${memberId}/revoke-access`, { method: "POST", headers: { cookie: adminCookie }, body: JSON.stringify({ reason: "integration test" }) });
     assert.equal(revoke.status, 200);
     const revokedAccess = await request("/api/access/me", { headers: { cookie: memberCookie } });
     assert.equal((await revokedAccess.json() as { access: { hasAccess: boolean } }).access.hasAccess, false);
+    assert.equal((await (await request("/api/me", { headers: { cookie: memberCookie } })).json() as { user: { role: string } }).user.role, "user");
 
     const restored = await request(`/api/admin/users/${memberId}/restore-access`, { method: "POST", headers: { cookie: adminCookie }, body: JSON.stringify({ reason: "integration test" }) });
     assert.equal(restored.status, 200);
     const restoredAccess = await request("/api/access/me", { headers: { cookie: memberCookie } });
     assert.equal((await restoredAccess.json() as { access: { hasAccess: boolean } }).access.hasAccess, true);
+    assert.equal((await (await request("/api/me", { headers: { cookie: memberCookie } })).json() as { user: { role: string } }).user.role, "user");
+    assert.equal((await request("/api/admin/audit", { headers: { cookie: memberCookie } })).status, 403);
+
+    const auditResponse = await request("/api/admin/audit", { headers: { cookie: adminCookie } });
+    assert.equal(auditResponse.status, 200);
+    const auditBody = await auditResponse.json() as { audit: Array<{ actor: { email: string } | null; target: { email: string } | null }> };
+    assert.ok(auditBody.audit.some((entry) => entry.actor?.email === admin.email && entry.target?.email === member.email));
 
     const revokedAgain = await request(`/api/admin/users/${memberId}/revoke-access`, { method: "POST", headers: { cookie: adminCookie }, body: JSON.stringify({ reason: "integration test" }) });
     assert.equal(revokedAgain.status, 200);

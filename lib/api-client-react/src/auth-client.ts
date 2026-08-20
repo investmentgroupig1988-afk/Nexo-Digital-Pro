@@ -47,6 +47,8 @@ export type AdminAuditEntry = {
   action: string;
   metadata: Record<string, unknown>;
   createdAt: string;
+  actor: { username: string; email: string } | null;
+  target: { username: string; email: string } | null;
 };
 
 const jsonRequest = {
