@@ -8,10 +8,12 @@ import {
   type PaymentRequestMethod,
 } from "@workspace/api-client-react";
 import { CheckCircle2, ExternalLink } from "lucide-react";
-import { type FormEvent, type ReactNode, useId, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Brand } from "./PublicLanding";
 
 const USDT_WALLET = "TJmF8D7twrHckM1LfqPwh64WgYcSgURKRS";
+const SUPPORT_WHATSAPP_NUMBER = "5491151550781";
+const ARGENTINA_PAYMENT_DETAILS: { alias: string | null; cbuCvu: string | null } = { alias: null, cbuCvu: null };
 const MAX_PROOF_BYTES = 5 * 1024 * 1024;
 const ACCEPTED_PROOF_TYPES = new Set(["application/pdf", "image/png", "image/jpeg", "image/webp"]);
 
@@ -57,13 +59,13 @@ export function AccountPanel({ account, onDashboard, onLogout, onAdmin }: Accoun
             {access.hasAccess ? <><dl className="mt-6 space-y-3"><Data label="Estado" value="Activo" /><Data label="Tipo de acceso" value={access.accessType ? accessTypeLabel(access.accessType) : "No disponible"} /><Data label="Fecha de acceso" value={access.grantedAt ? formatDate(access.grantedAt) : "No disponible"} /><Data label="Vencimiento" value={access.expiresAt ? formatDate(access.expiresAt) : "Sin vencimiento"} /></dl><button className="mt-7 min-h-12 w-full rounded-xl bg-violet-400 px-4 py-3 text-sm font-bold text-[#130c29] hover:bg-violet-300" onClick={onDashboard} type="button">Abrir panel privado</button></> : <RequestSummary request={latestRequest} />}
           </article>
         </section>
-        {!access.hasAccess ? <PaymentAccessSection latestRequest={latestRequest} loading={requests.isPending} /> : null}
+        {!access.hasAccess ? <PaymentAccessSection identity={{ email: user.email, username: user.username }} latestRequest={latestRequest} loading={requests.isPending} /> : null}
       </div>
     </main>
   );
 }
 
-function PaymentAccessSection({ latestRequest, loading }: { latestRequest: PaymentRequest | null; loading: boolean }) {
+function PaymentAccessSection({ identity, latestRequest, loading }: { identity: { email: string; username: string }; latestRequest: PaymentRequest | null; loading: boolean }) {
   const [showForm, setShowForm] = useState(false);
   const [created, setCreated] = useState<{ request: PaymentRequest; whatsappUrl: string } | null>(null);
   const queryClient = useQueryClient();
@@ -73,15 +75,17 @@ function PaymentAccessSection({ latestRequest, loading }: { latestRequest: Payme
       setCreated(result);
       setShowForm(false);
       await queryClient.invalidateQueries({ queryKey: ["payment-requests", "me"] });
-      window.open(result.whatsappUrl, "_blank", "noopener,noreferrer");
     },
   });
   const underReview = latestRequest?.status === "PENDING" || latestRequest?.status === "NEEDS_REVIEW" || Boolean(created);
+  const savedRequest = created?.request ?? (underReview ? latestRequest : null);
+  const whatsappUrl = created?.whatsappUrl ?? (savedRequest ? buildWhatsAppUrl(savedRequest, identity) : null);
 
   return <section aria-labelledby="payment-title" className="mt-6 rounded-2xl border border-white/8 bg-[#090a14] p-5 sm:p-7">
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-200">Acceso Founders</p><h2 className="mt-2 text-2xl font-semibold text-white" id="payment-title">Pago único · USD 27</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">Cargá los datos de tu pago. Primero guardamos la solicitud y, recién después, preparamos el mensaje de verificación por WhatsApp.</p></div>{!underReview && !loading ? <button className="min-h-12 shrink-0 rounded-xl bg-violet-400 px-5 text-sm font-bold text-[#150c2d] hover:bg-violet-300" onClick={() => setShowForm((value) => !value)} type="button">{showForm ? "Cerrar formulario" : "Obtener acceso"}</button> : null}</div>
-    {created ? <WhatsAppConfirmation result={created} /> : null}
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-200">Acceso Founders</p><h2 className="mt-2 text-2xl font-semibold text-white" id="payment-title">Pago único · USD 27</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">Cargá los datos de tu pago y enviá la solicitud. WhatsApp queda disponible después como canal opcional de soporte y verificación.</p></div>{!underReview && !loading ? <button className="min-h-12 shrink-0 rounded-xl bg-violet-400 px-5 text-sm font-bold text-[#150c2d] hover:bg-violet-300" onClick={() => setShowForm((value) => !value)} type="button">{showForm ? "Cerrar formulario" : "Obtener acceso"}</button> : null}</div>
+    {created ? <WhatsAppConfirmation request={created.request} /> : null}
     {!created && underReview ? <div className="mt-6 rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-4 text-sm leading-6 text-amber-100"><strong>Solicitud en revisión.</strong> El equipo usará el registro de la plataforma para validar el pago. {latestRequest?.status === "NEEDS_REVIEW" ? "Revisá las notas del administrador y contactá soporte si te solicitaron información adicional." : "No hace falta crear otra solicitud."}</div> : null}
+    {underReview ? <SubmittedActions whatsappUrl={whatsappUrl} /> : null}
     {latestRequest?.status === "REJECTED" && !showForm ? <div className="mt-6 rounded-xl border border-rose-300/20 bg-rose-300/[0.06] p-4 text-sm leading-6 text-rose-100">La solicitud anterior fue rechazada{latestRequest.notes ? `: ${latestRequest.notes}` : "."} Podés iniciar una nueva con la referencia y evidencia correctas.</div> : null}
     {showForm && !underReview ? <PaymentForm error={mutation.isError ? readableError(mutation.error) : null} pending={mutation.isPending} onSubmit={(input) => mutation.mutate(input)} /> : null}
   </section>;
@@ -121,7 +125,7 @@ function PaymentForm({ pending, error, onSubmit }: { pending: boolean; error: st
 
   return <form className="mt-7 border-t border-white/8 pt-7" onSubmit={(event) => void submit(event)}>
     <fieldset><legend className="text-sm font-semibold text-white">Elegí el método</legend><div className="mt-3 grid gap-3 sm:grid-cols-2"><MethodButton active={!isUsdt} detail="Argentina · importe en ARS" label="Mercado Pago / transferencia" onClick={() => { setMethod("MERCADO_PAGO_TRANSFER"); setAmount(""); }} /><MethodButton active={isUsdt} detail="Internacional · red TRC20" label="USDT TRC20" onClick={() => { setMethod("USDT_TRC20"); setAmount("27"); }} /></div></fieldset>
-    {isUsdt ? <div className="mt-5 rounded-xl border border-violet-300/15 bg-violet-400/[0.055] p-4"><p className="text-xs font-bold uppercase tracking-[0.14em] text-violet-200">Wallet destino · solo TRC20</p><code className="mt-2 block break-all text-sm leading-6 text-slate-200">{USDT_WALLET}</code><p className="mt-2 text-xs leading-5 text-slate-400">Importe Founders: 27 USDT. Verificá la red antes de enviar.</p></div> : null}
+    {isUsdt ? <div className="mt-5 rounded-xl border border-violet-300/15 bg-violet-400/[0.055] p-4"><CopyPaymentValue label="Wallet destino · solo TRC20" value={USDT_WALLET} /><p className="mt-3 text-xs leading-5 text-slate-400">Importe Founders: 27 USDT. Verificá la red antes de enviar.</p></div> : <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.02] p-4"><p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-300">Datos de destino</p><div className="mt-3 grid gap-3 sm:grid-cols-2"><CopyPaymentValue label="Alias" value={ARGENTINA_PAYMENT_DETAILS.alias} /><CopyPaymentValue label="CBU/CVU" value={ARGENTINA_PAYMENT_DETAILS.cbuCvu} /></div><p className="mt-3 text-xs leading-5 text-slate-500">Se habilitarán para copiar cuando se carguen los datos oficiales.</p></div>}
     <div className="mt-6 grid gap-4 sm:grid-cols-2">
       {!isUsdt ? <Field id={`${fieldId}-amount`} label="Importe abonado (ARS)"><input className={inputClass} id={`${fieldId}-amount`} inputMode="decimal" onChange={(event) => setAmount(event.target.value)} placeholder="Ej.: 35000" required value={amount} /></Field> : <Field id={`${fieldId}-amount`} label="Importe"><input className={inputClass} disabled id={`${fieldId}-amount`} value="27 USDT" /></Field>}
       <Field id={`${fieldId}-date`} label="Fecha y hora del pago"><input className={inputClass} id={`${fieldId}-date`} max={toLocalDateTimeInput(new Date())} onChange={(event) => setDeclaredPaidAt(event.target.value)} required type="datetime-local" value={declaredPaidAt} /></Field>
@@ -130,13 +134,43 @@ function PaymentForm({ pending, error, onSubmit }: { pending: boolean; error: st
     </div>
     <Field id={`${fieldId}-proof`} label={`Comprobante ${isUsdt ? "(opcional)" : ""}`}><input accept="application/pdf,image/png,image/jpeg,image/webp" className="mt-2 block min-h-12 w-full rounded-xl border border-dashed border-white/15 bg-[#070912] px-3 py-3 text-sm text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-violet-400/12 file:px-3 file:py-2 file:font-semibold file:text-violet-100" id={`${fieldId}-proof`} onChange={(event) => setProof(event.target.files?.[0] ?? null)} required={!isUsdt} type="file" /><span className="mt-2 block text-xs leading-5 text-slate-500">PDF, PNG, JPG o WEBP · máximo 5 MB.</span></Field>
     {localError || error ? <p className="mt-5 rounded-xl border border-rose-300/20 bg-rose-300/[0.06] p-3 text-sm text-rose-100" role="alert">{localError ?? error}</p> : null}
-    <button className="mt-6 min-h-12 w-full rounded-xl bg-violet-400 px-5 text-sm font-bold text-[#150c2d] hover:bg-violet-300 disabled:cursor-wait disabled:opacity-60 sm:w-auto" disabled={pending} type="submit">{pending ? "Guardando solicitud…" : "Guardar y continuar por WhatsApp"}</button>
-    <p className="mt-3 max-w-2xl text-xs leading-5 text-slate-500">WhatsApp se abre únicamente si el servidor guardó la solicitud. La aprobación siempre se realiza desde Administración.</p>
+    <div className="mt-6 grid gap-3 sm:grid-cols-2">
+      <button className="min-h-12 w-full rounded-xl bg-violet-400 px-4 text-sm font-bold text-[#150c2d] hover:bg-violet-300 disabled:cursor-wait disabled:opacity-60" disabled={pending} type="submit">{pending ? "ENVIANDO SOLICITUD…" : "SOLICITAR ACCESO"}</button>
+      <button aria-describedby={`${fieldId}-whatsapp-help`} className="min-h-12 w-full cursor-not-allowed rounded-xl border border-white/12 bg-white/[0.025] px-4 text-sm font-bold text-slate-500" disabled type="button">CONTACTAR POR WHATSAPP</button>
+    </div>
+    <p className="mt-3 max-w-2xl text-xs leading-5 text-slate-500" id={`${fieldId}-whatsapp-help`}>Solicitá el acceso para poder contactar por WhatsApp.</p>
   </form>;
 }
 
-function WhatsAppConfirmation({ result }: { result: { request: PaymentRequest; whatsappUrl: string } }) {
-  return <div className="mt-6 rounded-xl border border-emerald-300/20 bg-emerald-300/[0.055] p-4 sm:p-5"><div className="flex items-start gap-3"><CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" /><div className="min-w-0"><p className="font-semibold text-white">Solicitud guardada correctamente</p><p className="mt-1 break-all text-xs text-slate-400">ID: {result.request.id}</p><p className="mt-3 text-sm leading-6 text-slate-300">La base de datos ya contiene tu solicitud. Enviá ahora el mensaje preparado al canal oficial de verificación.</p><a className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-violet-300/25 bg-violet-400/10 px-4 text-sm font-bold text-violet-100 hover:bg-violet-400/15 sm:w-auto" href={result.whatsappUrl} rel="noreferrer" target="_blank">Necesito ayuda por WhatsApp <ExternalLink className="h-4 w-4" /></a></div></div></div>;
+function WhatsAppConfirmation({ request }: { request: PaymentRequest }) {
+  return <div className="mt-6 rounded-xl border border-emerald-300/20 bg-emerald-300/[0.055] p-4 sm:p-5"><div className="flex items-start gap-3"><CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" /><div className="min-w-0"><p className="font-semibold text-white">Solicitud enviada / En revisión</p><p className="mt-1 break-all text-xs text-slate-400">ID: {request.id}</p><p className="mt-3 text-sm leading-6 text-slate-300">La solicitud quedó guardada correctamente. Podés esperar la revisión o contactar por WhatsApp de forma opcional.</p></div></div></div>;
+}
+
+function SubmittedActions({ whatsappUrl }: { whatsappUrl: string | null }) {
+  return <div className="mt-4 grid gap-3 sm:grid-cols-2"><button className="min-h-12 w-full cursor-default rounded-xl bg-violet-400/70 px-4 text-sm font-bold text-[#150c2d]" disabled type="button"><span aria-hidden="true">✓ </span>SOLICITUD ENVIADA</button><button className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-violet-300/25 bg-violet-400/10 px-4 text-sm font-bold text-violet-100 hover:bg-violet-400/15 disabled:cursor-not-allowed disabled:opacity-50" disabled={!whatsappUrl} onClick={() => whatsappUrl && openWhatsApp(whatsappUrl)} type="button">CONTACTAR POR WHATSAPP <ExternalLink className="h-4 w-4" /></button></div>;
+}
+
+function CopyPaymentValue({ label, value }: { label: string; value: string | null }) {
+  const [feedback, setFeedback] = useState<"copied" | "error" | null>(null);
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+  }, []);
+
+  const copy = async () => {
+    if (!value) return;
+    try {
+      await copyExactValue(value);
+      setFeedback("copied");
+    } catch {
+      setFeedback("error");
+    }
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+    feedbackTimer.current = setTimeout(() => setFeedback(null), 2_000);
+  };
+
+  return <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.14em] text-violet-200">{label}</p><div className="mt-2 flex min-w-0 flex-col gap-2 min-[390px]:flex-row min-[390px]:items-center"><code className="min-w-0 flex-1 break-all rounded-lg bg-black/20 px-3 py-2.5 text-sm leading-6 text-slate-200">{value ?? "Pendiente de configuración"}</code><button aria-label={`Copiar ${label}`} className="min-h-11 w-full shrink-0 rounded-lg border border-violet-300/25 bg-violet-400/10 px-3 text-sm font-bold text-violet-100 hover:bg-violet-400/15 disabled:cursor-not-allowed disabled:border-white/8 disabled:bg-white/[0.02] disabled:text-slate-600 min-[390px]:w-auto min-[390px]:min-w-24" disabled={!value} onClick={() => void copy()} type="button">{feedback === "copied" ? "Copiado ✓" : feedback === "error" ? "No se pudo copiar" : "Copiar"}</button></div><span aria-live="polite" className="sr-only">{feedback === "copied" ? `${label} copiado` : feedback === "error" ? `No se pudo copiar ${label}` : ""}</span></div>;
 }
 
 function RequestSummary({ request }: { request: PaymentRequest | null }) {
@@ -158,6 +192,63 @@ function methodLabel(method: PaymentRequestMethod): string { return method === "
 function requestStateTitle(request: PaymentRequest | null): string { if (!request) return "Sin acceso privado"; if (request.status === "PENDING") return "Solicitud en revisión"; if (request.status === "NEEDS_REVIEW") return "Necesitamos más información"; if (request.status === "APPROVED") return "Pago aprobado"; return "Sin acceso privado"; }
 function requestStateDescription(request: PaymentRequest | null): string { if (!request) return "Podés solicitar el acceso Founders desde esta cuenta."; if (request.status === "PENDING") return "Tu pago quedó registrado y está pendiente de validación administrativa."; if (request.status === "NEEDS_REVIEW") return "El equipo dejó una observación antes de tomar una decisión."; if (request.status === "APPROVED") return "La aprobación fue registrada. Volvé a enfocar o recargá esta página para actualizar tu acceso."; return "La solicitud anterior no concedió acceso. Podés corregir los datos y crear otra."; }
 function readableError(error: unknown): string { if (!(error instanceof Error)) return "No se pudo guardar la solicitud."; return error.message.replace(/^HTTP \d+ [^:]+:\s*/, ""); }
+
+function openWhatsApp(url: string): void {
+  const opened = window.open(url, "_blank", "noopener,noreferrer");
+  if (opened) opened.opener = null;
+}
+
+function buildWhatsAppUrl(request: PaymentRequest, identity: { email: string; username: string }): string {
+  const message = [
+    "Hola, solicito la verificación de mi acceso Founders a Nexo Digital Pro.",
+    `ID de solicitud: ${request.id}`,
+    `Usuario: ${identity.username}`,
+    `Email: ${identity.email}`,
+    `Método: ${methodLabel(request.method)}`,
+    `Importe: ${formatAmount(request.amount)} ${request.currency}`,
+    request.method === "USDT_TRC20" ? `Wallet destino: ${USDT_WALLET}` : null,
+    `Referencia / TXID: ${request.referenceOrTxid}`,
+    `Evidencia cargada en la plataforma: ${request.proof ? "Sí" : "No (opcional para USDT)"}.`,
+  ].filter((line): line is string => Boolean(line)).join("\n");
+  return `https://wa.me/${SUPPORT_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+}
+
+function formatAmount(value: string): string {
+  return Number(value).toLocaleString("es-AR", { maximumFractionDigits: 8 });
+}
+
+async function copyExactValue(value: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return;
+    } catch {
+      // Continue with the DOM fallback when Clipboard API is unavailable or denied.
+    }
+  }
+
+  const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.readOnly = true;
+  textarea.setAttribute("aria-hidden", "true");
+  textarea.style.position = "fixed";
+  textarea.style.inset = "0 auto auto -9999px";
+  textarea.style.opacity = "0";
+  textarea.style.pointerEvents = "none";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+
+  try {
+    if (typeof document.execCommand !== "function" || !document.execCommand("copy")) {
+      throw new Error("Clipboard unavailable");
+    }
+  } finally {
+    textarea.remove();
+    activeElement?.focus();
+  }
+}
 
 async function fileToProof(file: File) {
   if (!ACCEPTED_PROOF_TYPES.has(file.type)) throw new Error("Elegí un archivo PDF, PNG, JPG o WEBP.");

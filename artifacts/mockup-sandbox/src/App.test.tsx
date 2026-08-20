@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -26,6 +26,29 @@ vi.mock("@/components/market/MarketDashboard", () => ({ MarketDashboard: () => <
 vi.mock("@/components/access/AdminPanel", () => ({ AdminPanel: () => <div>Administración protegida</div> }));
 
 import App from "./App";
+
+const clipboardWriteText = vi.fn();
+
+function pendingRequest() {
+  return {
+    id: "5db27aa4-9c43-4ac5-bb7d-5694b1d54150",
+    userId: "user-1",
+    method: "USDT_TRC20",
+    amount: "27.00000000",
+    currency: "USDT",
+    declaredPaidAt: "2026-01-03T00:00:00.000Z",
+    referenceOrTxid: "a".repeat(64),
+    payerName: null,
+    senderWallet: null,
+    proof: null,
+    status: "PENDING",
+    notes: null,
+    reviewedBy: null,
+    reviewedAt: null,
+    createdAt: "2026-01-03T00:00:00.000Z",
+    updatedAt: "2026-01-03T00:00:00.000Z",
+  };
+}
 
 function account(hasAccess: boolean, role: "user" | "admin" = "user") {
   return {
@@ -59,6 +82,10 @@ function renderApp() {
 beforeEach(() => {
   vi.clearAllMocks();
   api.getMyPaymentRequests.mockResolvedValue({ requests: [] });
+  clipboardWriteText.mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: clipboardWriteText } });
+  Object.defineProperty(document, "execCommand", { configurable: true, value: undefined, writable: true });
+  Object.defineProperty(window, "open", { configurable: true, value: vi.fn(), writable: true });
 });
 
 afterEach(() => cleanup());
@@ -110,33 +137,91 @@ describe("commercial access shell", () => {
     expect(await screen.findByRole("button", { name: "Obtener acceso" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Obtener acceso" }));
     expect(screen.getByText("Mercado Pago / transferencia")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "CONTACTAR POR WHATSAPP" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Solicitá el acceso para poder contactar por WhatsApp.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /USDT TRC20/i }));
     expect(screen.getByText("TJmF8D7twrHckM1LfqPwh64WgYcSgURKRS")).toBeTruthy();
   });
 
-  it("shows a pending request as under review and does not offer a duplicate form", async () => {
+  it("copies only the exact USDT wallet and shows temporary feedback", async () => {
     api.getAccount.mockResolvedValue(account(false));
-    api.getMyPaymentRequests.mockResolvedValue({ requests: [{
-      id: "5db27aa4-9c43-4ac5-bb7d-5694b1d54150",
-      userId: "user-1",
-      method: "USDT_TRC20",
-      amount: "27.00000000",
-      currency: "USDT",
-      declaredPaidAt: "2026-01-03T00:00:00.000Z",
-      referenceOrTxid: "a".repeat(64),
-      payerName: null,
-      senderWallet: null,
-      proof: null,
-      status: "PENDING",
-      notes: null,
-      reviewedBy: null,
-      reviewedAt: null,
-      createdAt: "2026-01-03T00:00:00.000Z",
-      updatedAt: "2026-01-03T00:00:00.000Z",
-    }] });
+    renderApp();
+    fireEvent.click(await screen.findByRole("button", { name: "Obtener acceso" }));
+    fireEvent.click(screen.getByRole("button", { name: /USDT TRC20/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Copiar Wallet destino · solo TRC20" }));
+
+    await waitFor(() => expect(clipboardWriteText).toHaveBeenCalledWith("TJmF8D7twrHckM1LfqPwh64WgYcSgURKRS"));
+    expect(clipboardWriteText).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Copiado ✓")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText("Copiado ✓")).toBeNull(), { timeout: 2_500 });
+  });
+
+  it("uses the safe DOM fallback when Clipboard API access is denied", async () => {
+    const fallbackCopy = vi.fn((command: string) => {
+      expect(command).toBe("copy");
+      expect((document.querySelector("textarea[aria-hidden='true']") as HTMLTextAreaElement | null)?.value).toBe("TJmF8D7twrHckM1LfqPwh64WgYcSgURKRS");
+      return true;
+    });
+    clipboardWriteText.mockRejectedValue(new Error("clipboard denied"));
+    Object.defineProperty(document, "execCommand", { configurable: true, value: fallbackCopy, writable: true });
+    api.getAccount.mockResolvedValue(account(false));
+    renderApp();
+    fireEvent.click(await screen.findByRole("button", { name: "Obtener acceso" }));
+    fireEvent.click(screen.getByRole("button", { name: /USDT TRC20/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Copiar Wallet destino · solo TRC20" }));
+
+    await waitFor(() => expect(fallbackCopy).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("Copiado ✓")).toBeTruthy();
+    expect(document.querySelector("textarea[aria-hidden='true']")).toBeNull();
+  });
+
+  it("saves without opening WhatsApp, then enables optional contact without creating a duplicate", async () => {
+    const request = pendingRequest();
+    api.getAccount.mockResolvedValue(account(false));
+    api.createPaymentRequest.mockResolvedValue({ request, whatsappUrl: "https://wa.me/5491151550781?text=saved-request" });
+    renderApp();
+    fireEvent.click(await screen.findByRole("button", { name: "Obtener acceso" }));
+    const disabledContact = screen.getByRole("button", { name: "CONTACTAR POR WHATSAPP" });
+    expect((disabledContact as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: /USDT TRC20/i }));
+    fireEvent.change(screen.getByLabelText("TXID"), { target: { value: "a".repeat(64) } });
+    fireEvent.click(screen.getByRole("button", { name: "SOLICITAR ACCESO" }));
+
+    await waitFor(() => expect(api.createPaymentRequest).toHaveBeenCalledTimes(1));
+    expect(window.open).not.toHaveBeenCalled();
+    expect(await screen.findByText("Solicitud enviada / En revisión")).toBeTruthy();
+    const enabledContact = screen.getByRole("button", { name: /CONTACTAR POR WHATSAPP/ });
+    expect((enabledContact as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(enabledContact);
+    expect(window.open).toHaveBeenCalledWith("https://wa.me/5491151550781?text=saved-request", "_blank", "noopener,noreferrer");
+    expect(api.createPaymentRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it("enables WhatsApp for an existing pending request without offering or creating a duplicate", async () => {
+    api.getAccount.mockResolvedValue(account(false));
+    api.getMyPaymentRequests.mockResolvedValue({ requests: [pendingRequest()] });
     renderApp();
     expect(await screen.findByRole("heading", { name: "Solicitud en revisión" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Obtener acceso" })).toBeNull();
+    const contact = screen.getByRole("button", { name: /CONTACTAR POR WHATSAPP/ });
+    expect((contact as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(contact);
+    expect(api.createPaymentRequest).not.toHaveBeenCalled();
+    expect(window.open).toHaveBeenCalledTimes(1);
+    const openedUrl = vi.mocked(window.open).mock.calls[0]?.[0];
+    expect(typeof openedUrl === "string" ? decodeURIComponent(openedUrl) : "").toContain("ID de solicitud: 5db27aa4-9c43-4ac5-bb7d-5694b1d54150");
+  });
+
+  it("keeps payment controls touch-friendly and contains horizontal overflow at mobile width", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 360 });
+    api.getAccount.mockResolvedValue(account(false));
+    renderApp();
+    fireEvent.click(await screen.findByRole("button", { name: "Obtener acceso" }));
+    const requestButton = screen.getByRole("button", { name: "SOLICITAR ACCESO" });
+    const contactButton = screen.getByRole("button", { name: "CONTACTAR POR WHATSAPP" });
+    expect(requestButton.className).toContain("min-h-12");
+    expect(contactButton.className).toContain("min-h-12");
+    expect(document.querySelector("main")?.className).toContain("overflow-x-hidden");
   });
 
   it("opens the analysis panel only after the server reports active access", async () => {
