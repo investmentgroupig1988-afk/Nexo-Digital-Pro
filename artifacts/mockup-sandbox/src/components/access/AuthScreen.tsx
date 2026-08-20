@@ -49,10 +49,10 @@ export function AuthScreen({ mode, onComplete, onSwitchMode, onBack }: AuthScree
         <Brand />
         <p className="mt-8 text-xs font-bold uppercase tracking-[0.18em] text-violet-200">{isRegister ? "Tu cuenta" : "Acceso seguro"}</p>
         <h1 className="mt-2 text-2xl font-semibold text-white">{isRegister ? "Crea tu cuenta" : "Iniciá sesión"}</h1>
-        <p className="mt-2 text-sm leading-6 text-slate-400">{isRegister ? "Elegí un username único. El acceso al panel privado se concede por separado." : "Usá el email y la contraseña de tu cuenta."}</p>
+        <p className="mt-2 text-sm leading-6 text-slate-400">{isRegister ? "Elegí un nombre de usuario único. El acceso al panel privado se concede por separado." : "Usá el email y la contraseña de tu cuenta."}</p>
 
         <form className="mt-7 space-y-4" onSubmit={(event) => void submit(event)}>
-          {isRegister ? <Field label="Username" name="username" autoComplete="username" minLength={3} maxLength={32} pattern="[A-Za-z0-9_]+" helper="Entre 3 y 32 caracteres: letras, números o _." required /> : null}
+          {isRegister ? <Field label="Nombre de usuario" name="username" autoComplete="username" minLength={3} maxLength={32} pattern="[A-Za-z0-9_]+" helper="Entre 3 y 32 caracteres: letras, números o _." required /> : null}
           {isRegister ? <Field label="Nombre (opcional)" name="name" autoComplete="name" maxLength={120} /> : null}
           <Field label="Email" name="email" type="email" autoComplete="email" maxLength={320} required />
           <Field label="Contraseña" name="password" type="password" autoComplete={isRegister ? "new-password" : "current-password"} minLength={isRegister ? 12 : 1} maxLength={128} helper={isRegister ? "Mínimo 12 caracteres." : undefined} required />

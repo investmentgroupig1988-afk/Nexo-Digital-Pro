@@ -60,8 +60,39 @@ describe("commercial access shell", () => {
   it("shows the public landing when there is no valid session", async () => {
     api.getAccount.mockRejectedValue(new Error("not signed in"));
     renderApp();
-    expect(await screen.findByText("Founders Lifetime · USD 27")).toBeTruthy();
-    expect(screen.getByText("Compra próximamente")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Analizá el mercado con más contexto, en un solo panel." })).toBeTruthy();
+    expect(screen.getByText("USD 27")).toBeTruthy();
+    expect(screen.getByText("pago único")).toBeTruthy();
+    expect(screen.getByText("BTC")).toBeTruthy();
+    expect(screen.getByText("XAUUSD")).toBeTruthy();
+    expect(screen.getByText("Próximamente")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Análisis técnico" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Datos reales" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Señal técnica y contexto" })).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/win rate|p&l|rentabilidad garantizada|clientes activos/i);
+  });
+
+  it("connects public calls to action with registration and login", async () => {
+    api.getAccount.mockRejectedValue(new Error("not signed in"));
+    renderApp();
+    const registerButtons = await screen.findAllByRole("button", { name: "Crear cuenta" });
+    fireEvent.click(registerButtons[0]);
+    expect(await screen.findByRole("heading", { name: "Crea tu cuenta" })).toBeTruthy();
+    fireEvent.click(screen.getByText("← Volver"));
+    const loginButtons = await screen.findAllByRole("button", { name: "Iniciar sesión" });
+    fireEvent.click(loginButtons[0]);
+    expect(await screen.findByRole("heading", { name: "Iniciá sesión" })).toBeTruthy();
+  });
+
+  it("opens FAQ and legal information without inventing unpublished policies", async () => {
+    api.getAccount.mockRejectedValue(new Error("not signed in"));
+    renderApp();
+    const question = await screen.findByText("¿Nexo Digital Pro ejecuta operaciones?");
+    fireEvent.click(question);
+    expect(screen.getByText(/cada usuario decide si opera/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Política de Reembolsos" }));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.getByText("Documento pendiente de publicación")).toBeTruthy();
   });
 
   it("keeps a signed-in user without entitlement out of the private panel", async () => {
