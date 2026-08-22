@@ -9,6 +9,7 @@ import adminRouter from "./admin";
 import paymentRequestsRouter from "./payment-requests";
 import { requireProductAccess } from "../auth/session";
 import { authRateLimit } from "../middlewares/security";
+import { requireCommercialProductAvailability } from "../middlewares/commercial-product";
 
 const router: IRouter = Router();
 
@@ -17,8 +18,8 @@ router.use("/auth", authRateLimit, authRouter);
 router.use(accountRouter);
 router.use(paymentRequestsRouter);
 router.use(adminRouter);
-router.use(requireProductAccess(), historicalRouter);
-router.use(requireProductAccess(), marketRouter);
-router.use(requireProductAccess(), signalsRouter);
+router.use(requireProductAccess(), requireCommercialProductAvailability, historicalRouter);
+router.use(requireProductAccess(), requireCommercialProductAvailability, marketRouter);
+router.use(requireProductAccess(), requireCommercialProductAvailability, signalsRouter);
 
 export default router;

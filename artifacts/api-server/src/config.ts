@@ -87,6 +87,14 @@ function parseOptionalUrl(name: string): string | undefined {
   return normalizeOrigin(value, name);
 }
 
+function parseBoolean(name: string, fallback: boolean): boolean {
+  const value = process.env[name]?.trim().toLowerCase();
+  if (!value) return fallback;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new Error(`${name} must be true or false.`);
+}
+
 function parseOptionalHttpUrl(name: string): string | undefined {
   const value = process.env[name]?.trim();
   if (!value) return undefined;
@@ -118,6 +126,7 @@ export const config = {
   authCookieSameSite: parseCookieSameSite(),
   authRateLimitMax: parsePositiveInteger("AUTH_RATE_LIMIT_MAX", 10),
   authRateLimitWindowMs: 15 * 60_000,
+  argentinaPaymentsEnabled: parseBoolean("ARGENTINA_PAYMENTS_ENABLED", false),
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN?.trim() || undefined,
   telegramChatId: process.env.TELEGRAM_CHAT_ID?.trim() || undefined,
   notificationPublicUrl: parseOptionalHttpUrl("NOTIFICATION_PUBLIC_URL"),

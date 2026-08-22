@@ -112,7 +112,10 @@ describe("commercial access shell", () => {
     const registerButtons = await screen.findAllByRole("button", { name: "Crear cuenta" });
     fireEvent.click(registerButtons[0]);
     expect(await screen.findByRole("heading", { name: "Crea tu cuenta" })).toBeTruthy();
-    fireEvent.click(screen.getByText("← Volver"));
+    const back = screen.getByText("← Volver");
+    expect(back.className).toContain("min-h-11");
+    expect(screen.getByRole("button", { name: "Iniciá sesión" }).className).toContain("min-h-11");
+    fireEvent.click(back);
     const loginButtons = await screen.findAllByRole("button", { name: "Iniciar sesión" });
     fireEvent.click(loginButtons[0]);
     expect(await screen.findByRole("heading", { name: "Iniciá sesión" })).toBeTruthy();
@@ -127,6 +130,7 @@ describe("commercial access shell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Política de Reembolsos" }));
     expect(screen.getByRole("dialog")).toBeTruthy();
     expect(screen.getByText("Documento pendiente de publicación")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cerrar" }).className).toContain("h-11");
   });
 
   it("keeps a signed-in user without entitlement out of the private panel", async () => {
@@ -136,10 +140,10 @@ describe("commercial access shell", () => {
     expect(screen.queryByText("Panel de análisis con acceso")).toBeNull();
     expect(await screen.findByRole("button", { name: "Obtener acceso" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Obtener acceso" }));
-    expect(screen.getByText("Mercado Pago / transferencia")).toBeTruthy();
+    expect((screen.getByRole("button", { name: /Mercado Pago \/ transferencia/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Próximamente · datos no configurados")).toBeTruthy();
     expect((screen.getByRole("button", { name: "CONTACTAR POR WHATSAPP" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText("Solicitá el acceso para poder contactar por WhatsApp.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /USDT TRC20/i }));
     expect(screen.getByText("TJmF8D7twrHckM1LfqPwh64WgYcSgURKRS")).toBeTruthy();
   });
 

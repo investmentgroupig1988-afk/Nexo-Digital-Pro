@@ -45,7 +45,7 @@ export function AuthScreen({ mode, onComplete, onSwitchMode, onBack }: AuthScree
     <main className="grid min-h-screen place-items-center overflow-x-hidden bg-[#070812] px-4 py-8 text-slate-100">
       <div aria-hidden="true" className="pointer-events-none fixed inset-x-0 top-0 h-[32rem] bg-[radial-gradient(ellipse_at_top,rgba(124,58,237,0.22),transparent_62%)]" />
       <section className="relative w-full max-w-md rounded-3xl border border-white/10 bg-[#0b0d1b]/90 p-6 shadow-[0_25px_90px_rgba(0,0,0,0.4)] backdrop-blur-md sm:p-8">
-        <button className="mb-8 text-sm font-medium text-slate-400 transition hover:text-white" onClick={onBack} type="button">← Volver</button>
+        <button className="mb-8 inline-flex min-h-11 items-center text-sm font-medium text-slate-400 transition hover:text-white" onClick={onBack} type="button">← Volver</button>
         <Brand />
         <p className="mt-8 text-xs font-bold uppercase tracking-[0.18em] text-violet-200">{isRegister ? "Tu cuenta" : "Acceso seguro"}</p>
         <h1 className="mt-2 text-2xl font-semibold text-white">{isRegister ? "Crea tu cuenta" : "Iniciá sesión"}</h1>
@@ -60,7 +60,7 @@ export function AuthScreen({ mode, onComplete, onSwitchMode, onBack }: AuthScree
           <button className="w-full rounded-xl bg-violet-400 px-4 py-3 text-sm font-bold text-[#130c29] transition hover:bg-violet-300 disabled:cursor-not-allowed disabled:opacity-60" disabled={submitting} type="submit">{submitting ? "Procesando…" : isRegister ? "Crear cuenta" : "Iniciar sesión"}</button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-slate-400">{isRegister ? "¿Ya tenés cuenta?" : "¿Todavía no tenés cuenta?"} <button className="font-semibold text-violet-200 hover:text-violet-100" onClick={onSwitchMode} type="button">{isRegister ? "Iniciá sesión" : "Registrate"}</button></p>
+        <p className="mt-6 text-center text-sm text-slate-400">{isRegister ? "¿Ya tenés cuenta?" : "¿Todavía no tenés cuenta?"} <button className="inline-flex min-h-11 items-center font-semibold text-violet-200 hover:text-violet-100" onClick={onSwitchMode} type="button">{isRegister ? "Iniciá sesión" : "Registrate"}</button></p>
       </section>
     </main>
   );

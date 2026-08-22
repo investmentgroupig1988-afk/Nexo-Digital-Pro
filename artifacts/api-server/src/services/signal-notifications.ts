@@ -6,6 +6,7 @@ import { TelegramProvider } from "./telegram-provider";
 
 type Database = ReturnType<typeof getDatabase>;
 const MAX_ATTEMPTS = 5;
+const CLAIM_TIMEOUT_MS = 60_000;
 
 export function configuredNotificationProvider(): NotificationProvider | null {
   if (!config.telegramBotToken || !config.telegramChatId || !config.notificationPublicUrl) return null;
@@ -16,6 +17,7 @@ export async function dispatchSignalNotifications(provider: NotificationProvider
   if (!provider || !publicUrl) return;
   const openSignals = await database.select({ id: signals.id }).from(signals).where(eq(signals.status, "OPEN"));
   if (openSignals.length) await database.insert(notificationDeliveries).values(openSignals.map(({ id }) => ({ signalId: id, provider: provider.name }))).onConflictDoNothing();
+  await database.update(notificationDeliveries).set({ status: "PENDING", claimedAt: null, nextAttemptAt: now, lastError: "Recovered interrupted delivery claim.", updatedAt: now }).where(and(eq(notificationDeliveries.provider, provider.name), eq(notificationDeliveries.status, "SENDING"), lte(notificationDeliveries.claimedAt, new Date(now.getTime() - CLAIM_TIMEOUT_MS))));
   const pending = await database.select({ id: notificationDeliveries.id }).from(notificationDeliveries).where(and(eq(notificationDeliveries.provider, provider.name), eq(notificationDeliveries.status, "PENDING"), lte(notificationDeliveries.nextAttemptAt, now)));
   for (const candidate of pending) {
     const [claimed] = await database.update(notificationDeliveries).set({ status: "SENDING", claimedAt: now, updatedAt: now }).where(and(eq(notificationDeliveries.id, candidate.id), eq(notificationDeliveries.status, "PENDING"))).returning();

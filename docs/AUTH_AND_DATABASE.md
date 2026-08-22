@@ -39,7 +39,9 @@ BETTER_AUTH_SECRET=<secreto aleatorio de 32+ caracteres>
 BETTER_AUTH_URL=https://<host-publico-de-la-api>
 CORS_ALLOWED_ORIGINS=https://<host-del-frontend-staging>
 TRUST_PROXY_HOPS=1
-AUTH_COOKIE_SAME_SITE=none
+AUTH_COOKIE_SAME_SITE=lax
+AUTH_COOKIE_DOMAIN=
+ARGENTINA_PAYMENTS_ENABLED=false
 ```
 
 No definir `PORT`: Railway lo suministra. `TWELVEDATA_API_KEY` permanece únicamente en Railway/API. No configurar nunca `DATABASE_URL`, `BETTER_AUTH_SECRET` ni Twelve Data en Vercel.

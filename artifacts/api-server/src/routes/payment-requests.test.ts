@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createPaymentRequestSchema } from "./payment-requests";
+import { createPaymentRequestSchema, ensurePaymentMethodAvailable } from "./payment-requests";
 
 const baseRequest = {
   method: "USDT_TRC20",
@@ -22,4 +22,13 @@ test("HTTP input trims an informed sender wallet for service validation", () => 
     senderWallet: "  TJmF8D7twrHckM1LfqPwh64WgYcSgURKRS  ",
   });
   assert.equal(input.senderWallet, "TJmF8D7twrHckM1LfqPwh64WgYcSgURKRS");
+});
+
+test("the API rejects Argentina transfers until the owner explicitly enables them", () => {
+  assert.throws(
+    () => ensurePaymentMethodAvailable("MERCADO_PAGO_TRANSFER", false),
+    /La transferencia argentina aún no está habilitada/,
+  );
+  assert.doesNotThrow(() => ensurePaymentMethodAvailable("USDT_TRC20", false));
+  assert.doesNotThrow(() => ensurePaymentMethodAvailable("MERCADO_PAGO_TRANSFER", true));
 });

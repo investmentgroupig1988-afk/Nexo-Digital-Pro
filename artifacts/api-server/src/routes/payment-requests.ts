@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request } from "express";
 import { z } from "zod";
 import { paymentRequestMethods } from "@workspace/db";
 import { currentAuthenticatedUser, requireAuthenticatedUser } from "../auth/session";
+import { config } from "../config";
 import { trustedMutationOrigin } from "../middlewares/security";
 import {
   createPaymentRequest,
@@ -31,6 +32,15 @@ export const createPaymentRequestSchema = z.object({
   proof: proofSchema.optional(),
 });
 
+export function ensurePaymentMethodAvailable(
+  method: string,
+  argentinaPaymentsEnabled = config.argentinaPaymentsEnabled,
+): void {
+  if (method === paymentRequestMethods.mercadoPagoTransfer && !argentinaPaymentsEnabled) {
+    throw new PaymentRequestError("La transferencia argentina aún no está habilitada.", 409);
+  }
+}
+
 router.use("/payment-requests", requireAuthenticatedUser());
 router.use("/payment-requests", trustedMutationOrigin);
 
@@ -47,6 +57,7 @@ router.post("/payment-requests", async (req, res, next) => {
   try {
     const actor = currentAuthenticatedUser(res);
     const input = createPaymentRequestSchema.parse(req.body);
+    ensurePaymentMethodAvailable(input.method);
     const created = await createPaymentRequest({ id: actor.id, email: actor.email, username: actor.displayUsername }, input, requestAuditContext(req));
     res.status(201).json(created);
   } catch (error) {

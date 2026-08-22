@@ -113,6 +113,38 @@ test("duplicate email and username are rejected without producing a second ident
   assert.equal(matchingUsers.length, 1);
 });
 
+test("production auth emits a Secure, SameSite=Lax, host-only session cookie", async () => {
+  const apiOrigin = "https://api.nexodigitalpro.lat";
+  const frontendOrigin = "https://staging.nexodigitalpro.lat";
+  const productionAuth = createAuthForDatabase(database, {
+    databaseUrl: "postgresql://isolated-production-cookie-test",
+    betterAuthUrl: apiOrigin,
+    betterAuthSecret: "isolated-production-cookie-secret-over-thirty-two-characters",
+    corsOrigins: new Set([frontendOrigin]),
+    nodeEnv: "production",
+    authCookieSameSite: "lax",
+    authCookieDomain: undefined,
+  });
+  const suffix = randomUUID();
+  const response = await productionAuth.api.signUpEmail({
+    body: {
+      email: `secure-cookie-${suffix}@example.test`,
+      password: testPassword,
+      username: `secure_${suffix.replaceAll("-", "").slice(0, 20)}`,
+      displayUsername: `secure_${suffix.replaceAll("-", "").slice(0, 20)}`,
+      name: "Secure Cookie Test",
+    },
+    headers: new Headers({ origin: frontendOrigin }),
+    asResponse: true,
+  });
+  assert.equal(response.status, 200);
+  const setCookie = response.headers.get("set-cookie") ?? "";
+  assert.match(setCookie, /HttpOnly/i);
+  assert.match(setCookie, /Secure/i);
+  assert.match(setCookie, /SameSite=Lax/i);
+  assert.doesNotMatch(setCookie, /(?:^|;)\s*Domain=/i);
+});
+
 test("a credential write failure rolls back the complete signup transaction", async () => {
   const suffix = randomUUID();
   const email = `rollback-${suffix}@example.test`;

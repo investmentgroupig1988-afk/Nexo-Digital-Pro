@@ -33,6 +33,7 @@ La versión de Node se fija en `>=24 <25` y pnpm queda fijado mediante `packageM
 | Railway staging/producción | `CORS_ALLOWED_ORIGINS` | Origin HTTPS exacto del frontend Vercel correspondiente, sin ruta final. |
 | Railway staging/producción | `TRUST_PROXY_HOPS` | `1`. |
 | Railway staging/producción | `TWELVEDATA_API_KEY` | No es necesaria para la V1 comercial; XAUUSD permanece bloqueado. |
+| Railway staging/producción | `ARGENTINA_PAYMENTS_ENABLED` | `false` mientras falten Alias, CBU/CVU o titular oficiales. |
 | Vercel staging/producción | `VITE_API_BASE_URL` | Origin HTTPS exacto del backend Railway correspondiente, sin ruta final. Es público. |
 
 `CORS_ORIGINS` continúa funcionando como alias de compatibilidad, pero usar `CORS_ALLOWED_ORIGINS` en configuraciones nuevas. Se admiten varios origins separados por coma. Cada valor se valida como un origin `http(s)` sin paths, credenciales, query ni hash; no se aceptan comodines.
@@ -70,18 +71,18 @@ Usar estos ajustes exactos, ya fijados también en `vercel.json`:
 | Build Command | `corepack pnpm --filter @workspace/mockup-sandbox run build` |
 | Output Directory | `artifacts/mockup-sandbox/dist` |
 
-Crear en Vercel (entorno **Production** de ese proyecto staging) sólo:
+Primero asignar `staging.nexodigitalpro.lat` al proyecto y rama `deploy-ready-v1`, como se detalla abajo. Crear en Vercel (entorno **Production** de ese proyecto staging) sólo:
 
 ```text
-VITE_API_BASE_URL=https://<backend-staging>.up.railway.app
+VITE_API_BASE_URL=https://api.nexodigitalpro.lat
 ```
 
 No crear en Vercel `TWELVEDATA_API_KEY`, `CORS_ALLOWED_ORIGINS`, `PORT`, tokens ni credenciales. Volver a desplegar el frontend después de modificar una variable `VITE_*`, porque Vite la incorpora durante el build.
 
-Usar el alias estable de la rama, no la URL efímera de cada deployment. Para el proyecto actual, volver a Railway y definir:
+Usar el dominio estable, no la URL efímera de cada deployment. Volver a Railway y definir:
 
 ```text
-CORS_ALLOWED_ORIGINS=https://nexo-digital-pro-git-deploy-ready-v1-nexo-digital5.vercel.app
+CORS_ALLOWED_ORIGINS=https://staging.nexodigitalpro.lat
 ```
 
 Re-desplegar Railway. Los previews efímeros no se habilitan automáticamente; no usar `*`, regex amplias ni reflexión del header `Origin` cuando hay cookies. Agregar otro origin exacto sólo si se decide mantener un preview específico.
@@ -97,7 +98,7 @@ $env:API_BASE_URL = "https://<backend-staging>.up.railway.app"
 corepack pnpm run smoke:api
 ```
 
-Debe informar `API healthcheck passed`. Después, en el navegador, comprobar `GET /api/market?symbol=BTCUSDT`, velas e indicadores desde la interfaz. `XAUUSD` sólo debe probarse si configuraste una clave de Twelve Data válida y el plan/licencia del proveedor lo permite.
+Debe informar `API healthcheck passed`. Después, en el navegador, comprobar BTCUSDT y el dashboard desde la interfaz. Cualquier endpoint comercial con `symbol=XAUUSD` debe responder `423`; no configurar Twelve Data ni intentar habilitarlo para esta V1.
 
 ## Staging móvil estable bajo el mismo sitio
 
@@ -115,11 +116,14 @@ CORS_ALLOWED_ORIGINS=https://staging.nexodigitalpro.lat
 AUTH_COOKIE_SAME_SITE=lax
 AUTH_COOKIE_DOMAIN=
 TRUST_PROXY_HOPS=1
+ARGENTINA_PAYMENTS_ENABLED=false
 ```
 
 Dejar `AUTH_COOKIE_DOMAIN` vacío conserva una cookie host-only para la API, más restrictiva y suficiente porque ambos hosts comparten el sitio `nexodigitalpro.lat`. `Secure` se activa con `NODE_ENV=production`. No usar `SameSite=None`, `*.vercel.app`, regex, reflexión de `Origin` ni `*`.
 
 Tras el redeploy, borrar datos anteriores del sitio en el móvil, abrir `https://staging.nexodigitalpro.lat`, iniciar sesión y comprobar que el `GET /api/me` siguiente responde 200. CORS debe devolver exactamente `Access-Control-Allow-Origin: https://staging.nexodigitalpro.lat` y `Access-Control-Allow-Credentials: true`.
+
+La transferencia argentina permanece cerrada en dos capas: Vercel sólo la presenta como disponible cuando `VITE_PAYMENT_ALIAS`, `VITE_PAYMENT_CBU_CVU` y `VITE_PAYMENT_HOLDER` tienen valores oficiales; Railway sólo acepta solicitudes si además `ARGENTINA_PAYMENTS_ENABLED=true`. Mientras falte cualquier dato, no definir los tres valores en Vercel y mantener la variable de Railway en `false`. USDT continúa disponible.
 
 ## Telegram V1
 
@@ -131,7 +135,7 @@ TELEGRAM_CHAT_ID=<@canal_o_id>
 NOTIFICATION_PUBLIC_URL=https://staging.nexodigitalpro.lat/
 ```
 
-No crear estas variables en Vercel, GitHub ni con prefijo `VITE_`. Con las tres presentes, el refresco crea una entrega persistente por señal/proveedor, la reclama atómicamente y reintenta fallos hasta cinco veces. El mensaje contiene únicamente `SEÑAL ACTIVA` y el enlace: Telegram no recibe activo, dirección, timeframe, entrada, SL, TP, indicadores, snapshot ni metodología. `signals` sigue siendo la fuente de verdad.
+No crear estas variables en Vercel, GitHub ni con prefijo `VITE_`. Con las tres presentes, el refresco crea una entrega persistente por señal/proveedor, la reclama atómicamente, recupera reclamos interrumpidos por un reinicio y reintenta fallos hasta cinco veces. El mensaje contiene únicamente `SEÑAL ACTIVA` y el enlace: Telegram no recibe activo, dirección, timeframe, entrada, SL, TP, indicadores, snapshot ni metodología. `signals` sigue siendo la fuente de verdad.
 
 Si falta cualquier variable, Telegram queda deshabilitado sin afectar el motor. Para rotar el token, revocarlo en BotFather, actualizar Railway y redeployar. La interfaz de proveedor permite añadir web push/PWA como otro adaptador y otra entrega de outbox sin cambiar el ciclo de señales.
 
@@ -140,8 +144,8 @@ Si falta cualquier variable, Telegram queda deshabilitado sin afectar el motor. 
 1. Esperar CI verde y aprobar staging.
 2. Crear el entorno/servicio Railway de producción desde la rama `main`; usar los mismos comandos y healthcheck.
 3. Generar el dominio HTTPS del backend de producción.
-4. Crear el proyecto Vercel de producción desde `main`; usar los mismos ajustes de build y `VITE_API_BASE_URL=https://<backend-production>.up.railway.app`.
-5. Con el dominio Vercel definitivo, configurar en Railway producción `CORS_ALLOWED_ORIGINS=https://<frontend-production>.vercel.app` o el origin HTTPS del dominio propio futuro.
+4. Crear el proyecto Vercel de producción desde `main`; usar los mismos ajustes de build, asignar `www.nexodigitalpro.lat` y definir `VITE_API_BASE_URL=https://api.nexodigitalpro.lat`.
+5. En Railway producción configurar exactamente `BETTER_AUTH_URL=https://api.nexodigitalpro.lat`, `CORS_ALLOWED_ORIGINS=https://www.nexodigitalpro.lat`, `AUTH_COOKIE_SAME_SITE=lax`, `AUTH_COOKIE_DOMAIN=` y `TRUST_PROXY_HOPS=1`.
 6. Ejecutar smoke test contra Railway producción y repetir las comprobaciones del navegador.
 
 No se incluyen dominios, proyectos, IDs ni credenciales de cuenta en el repositorio. Si posteriormente se usa un dominio propio, mantener HTTPS en frontend y backend; no cargar una API `http://` desde una página `https://`.

@@ -15,6 +15,7 @@ const USDT_WALLET = "TJmF8D7twrHckM1LfqPwh64WgYcSgURKRS";
 const SUPPORT_WHATSAPP_NUMBER = "5491151550781";
 const configured = (value: string | undefined) => value?.trim() || null;
 const ARGENTINA_PAYMENT_DETAILS = { alias: configured(import.meta.env.VITE_PAYMENT_ALIAS), cbuCvu: configured(import.meta.env.VITE_PAYMENT_CBU_CVU), holder: configured(import.meta.env.VITE_PAYMENT_HOLDER) };
+const ARGENTINA_PAYMENTS_ENABLED = Boolean(ARGENTINA_PAYMENT_DETAILS.alias && ARGENTINA_PAYMENT_DETAILS.cbuCvu && ARGENTINA_PAYMENT_DETAILS.holder);
 const MAX_PROOF_BYTES = 5 * 1024 * 1024;
 const ACCEPTED_PROOF_TYPES = new Set(["application/pdf", "image/png", "image/jpeg", "image/webp"]);
 
@@ -93,8 +94,8 @@ function PaymentAccessSection({ identity, latestRequest, loading }: { identity: 
 }
 
 function PaymentForm({ pending, error, onSubmit }: { pending: boolean; error: string | null; onSubmit: (input: CreatePaymentRequestInput) => void }) {
-  const [method, setMethod] = useState<PaymentRequestMethod>("MERCADO_PAGO_TRANSFER");
-  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState<PaymentRequestMethod>(ARGENTINA_PAYMENTS_ENABLED ? "MERCADO_PAGO_TRANSFER" : "USDT_TRC20");
+  const [amount, setAmount] = useState(ARGENTINA_PAYMENTS_ENABLED ? "" : "27");
   const [declaredPaidAt, setDeclaredPaidAt] = useState(toLocalDateTimeInput(new Date()));
   const [reference, setReference] = useState("");
   const [payerName, setPayerName] = useState("");
@@ -125,7 +126,7 @@ function PaymentForm({ pending, error, onSubmit }: { pending: boolean; error: st
   };
 
   return <form className="mt-7 border-t border-white/8 pt-7" onSubmit={(event) => void submit(event)}>
-    <fieldset><legend className="text-sm font-semibold text-white">Elegí el método</legend><div className="mt-3 grid gap-3 sm:grid-cols-2"><MethodButton active={!isUsdt} detail="Argentina · importe en ARS" label="Mercado Pago / transferencia" onClick={() => { setMethod("MERCADO_PAGO_TRANSFER"); setAmount(""); }} /><MethodButton active={isUsdt} detail="Internacional · red TRC20" label="USDT TRC20" onClick={() => { setMethod("USDT_TRC20"); setAmount("27"); }} /></div></fieldset>
+    <fieldset><legend className="text-sm font-semibold text-white">Elegí el método</legend><div className="mt-3 grid gap-3 sm:grid-cols-2"><MethodButton active={!isUsdt} detail={ARGENTINA_PAYMENTS_ENABLED ? "Argentina · importe en ARS" : "Próximamente · datos no configurados"} disabled={!ARGENTINA_PAYMENTS_ENABLED} label="Mercado Pago / transferencia" onClick={() => { setMethod("MERCADO_PAGO_TRANSFER"); setAmount(""); }} /><MethodButton active={isUsdt} detail="Internacional · red TRC20" label="USDT TRC20" onClick={() => { setMethod("USDT_TRC20"); setAmount("27"); }} /></div></fieldset>
     {isUsdt ? <div className="mt-5 rounded-xl border border-violet-300/15 bg-violet-400/[0.055] p-4"><CopyPaymentValue label="Wallet destino · solo TRC20" value={USDT_WALLET} /><p className="mt-3 text-xs leading-5 text-slate-400">Importe Founders: 27 USDT. Verificá la red antes de enviar.</p></div> : <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.02] p-4"><p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-300">Datos de destino</p><div className="mt-3 grid gap-3 sm:grid-cols-2"><CopyPaymentValue label="Alias" value={ARGENTINA_PAYMENT_DETAILS.alias} /><CopyPaymentValue label="CBU/CVU" value={ARGENTINA_PAYMENT_DETAILS.cbuCvu} /><CopyPaymentValue label="Titular" value={ARGENTINA_PAYMENT_DETAILS.holder} /></div><p className="mt-3 text-xs leading-5 text-slate-500">{ARGENTINA_PAYMENT_DETAILS.alias && ARGENTINA_PAYMENT_DETAILS.cbuCvu && ARGENTINA_PAYMENT_DETAILS.holder ? "Verificá que los datos coincidan antes de transferir." : "Los datos oficiales se habilitarán aquí cuando estén configurados."}</p></div>}
     <div className="mt-6 grid gap-4 sm:grid-cols-2">
       {!isUsdt ? <Field id={`${fieldId}-amount`} label="Importe abonado (ARS)"><input className={inputClass} id={`${fieldId}-amount`} inputMode="decimal" onChange={(event) => setAmount(event.target.value)} placeholder="Ej.: 35000" required value={amount} /></Field> : <Field id={`${fieldId}-amount`} label="Importe"><input className={inputClass} disabled id={`${fieldId}-amount`} value="27 USDT" /></Field>}
@@ -179,7 +180,7 @@ function RequestSummary({ request }: { request: PaymentRequest | null }) {
   return <dl className="mt-6 space-y-3"><Data label="Estado" value={paymentStatusLabel(request.status)} /><Data label="Método" value={methodLabel(request.method)} /><Data label="Solicitud" value={request.id} /><Data label="Fecha" value={formatDate(request.createdAt)} />{request.notes ? <Data label="Notas" value={request.notes} /> : null}</dl>;
 }
 
-function MethodButton({ active, label, detail, onClick }: { active: boolean; label: string; detail: string; onClick: () => void }) { return <button aria-pressed={active} className={`min-h-20 rounded-xl border p-4 text-left transition ${active ? "border-violet-300/35 bg-violet-400/10" : "border-white/10 bg-white/[0.02] hover:border-white/20"}`} onClick={onClick} type="button"><span className="block text-sm font-semibold text-white">{label}</span><span className="mt-1 block text-xs text-slate-400">{detail}</span></button>; }
+function MethodButton({ active, label, detail, disabled = false, onClick }: { active: boolean; label: string; detail: string; disabled?: boolean; onClick: () => void }) { return <button aria-pressed={active} className={`min-h-20 rounded-xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-55 ${active ? "border-violet-300/35 bg-violet-400/10" : "border-white/10 bg-white/[0.02] hover:border-white/20"}`} disabled={disabled} onClick={onClick} type="button"><span className="block text-sm font-semibold text-white">{label}</span><span className="mt-1 block text-xs text-slate-400">{detail}</span></button>; }
 function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) { return <label className="mt-4 block text-sm font-medium text-slate-300" htmlFor={id}>{label}{children}</label>; }
 function Data({ label, value }: { label: string; value: string }) { return <div><dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</dt><dd className="mt-1 break-words text-sm font-medium text-slate-200">{value}</dd></div>; }
 
