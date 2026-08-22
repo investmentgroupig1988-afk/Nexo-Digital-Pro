@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
+  ApiError: class ApiError extends Error {},
   getAccount: vi.fn(),
   logout: vi.fn(),
   login: vi.fn(),
@@ -119,6 +120,20 @@ describe("commercial access shell", () => {
     const loginButtons = await screen.findAllByRole("button", { name: "Iniciar sesión" });
     fireEvent.click(loginButtons[0]);
     expect(await screen.findByRole("heading", { name: "Iniciá sesión" })).toBeTruthy();
+  });
+
+  it("keeps the login visible when the server cannot confirm the new session", async () => {
+    api.getAccount.mockRejectedValue(new Error("network unavailable"));
+    api.login.mockResolvedValue({ user: account(false).user });
+    renderApp();
+    fireEvent.click((await screen.findAllByRole("button", { name: "Iniciar sesión" }))[0]);
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "member@example.test" } });
+    fireEvent.change(screen.getByLabelText("Contraseña"), { target: { value: "correct-password" } });
+    fireEvent.click(screen.getByRole("button", { name: "Iniciar sesión" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("No se pudo iniciar sesión. Intentá nuevamente.");
+    expect(screen.getByRole("heading", { name: "Iniciá sesión" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Señales claras para seguir BTC con más contexto." })).toBeNull();
   });
 
   it("opens FAQ and legal information without inventing unpublished policies", async () => {
@@ -249,6 +264,8 @@ describe("commercial access shell", () => {
     renderApp();
     expect(await screen.findByRole("heading", { name: "Solicitud en revisión" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Obtener acceso" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "SOLICITUD ENVIADA" })).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain("SOLICITUD ENVIADA");
     const contact = screen.getByRole("button", { name: /CONTACTAR POR WHATSAPP/ });
     expect((contact as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(contact);
@@ -256,6 +273,19 @@ describe("commercial access shell", () => {
     expect(window.open).toHaveBeenCalledTimes(1);
     const openedUrl = vi.mocked(window.open).mock.calls[0]?.[0];
     expect(typeof openedUrl === "string" ? decodeURIComponent(openedUrl) : "").toContain("ID de solicitud: 5db27aa4-9c43-4ac5-bb7d-5694b1d54150");
+  });
+
+  it("blocks a new payment request while the saved request status cannot be loaded", async () => {
+    api.getAccount.mockResolvedValue(account(false));
+    api.getMyPaymentRequests.mockRejectedValue(new Error("network unavailable"));
+    renderApp();
+
+    expect((await screen.findByRole("alert")).textContent).toContain("No pudimos consultar el estado de tus solicitudes.");
+    expect(screen.queryByRole("button", { name: "Obtener acceso" })).toBeNull();
+
+    api.getMyPaymentRequests.mockResolvedValue({ requests: [] });
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+    expect(await screen.findByRole("button", { name: "Obtener acceso" })).toBeTruthy();
   });
 
   it("keeps payment controls touch-friendly and contains horizontal overflow at mobile width", async () => {

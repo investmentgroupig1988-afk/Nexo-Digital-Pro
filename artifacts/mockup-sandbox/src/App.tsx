@@ -24,7 +24,9 @@ function App() {
   const navigateDashboard = () => setPage(signedIn?.access.hasAccess ? "dashboard" : "account");
   const afterAuthentication = async () => {
     const result = await account.refetch();
-    setPage(result.data?.access.hasAccess ? "dashboard" : "account");
+    if (result.error) throw result.error;
+    if (!result.data) throw new Error("No se pudo confirmar la sesión.");
+    setPage(result.data.access.hasAccess ? "dashboard" : "account");
   };
   const signOut = async () => {
     try {

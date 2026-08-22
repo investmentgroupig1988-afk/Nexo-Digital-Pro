@@ -61,13 +61,13 @@ export function AccountPanel({ account, onDashboard, onLogout, onAdmin }: Accoun
             {access.hasAccess ? <><dl className="mt-6 space-y-3"><Data label="Estado" value="Activo" /><Data label="Tipo de acceso" value={access.accessType ? accessTypeLabel(access.accessType) : "No disponible"} /><Data label="Fecha de acceso" value={access.grantedAt ? formatDate(access.grantedAt) : "No disponible"} /><Data label="Vencimiento" value={access.expiresAt ? formatDate(access.expiresAt) : "Sin vencimiento"} /></dl><button className="mt-7 min-h-12 w-full rounded-xl bg-violet-400 px-4 py-3 text-sm font-bold text-[#130c29] hover:bg-violet-300" onClick={onDashboard} type="button">Abrir panel privado</button></> : <RequestSummary request={latestRequest} />}
           </article>
         </section>
-        {!access.hasAccess ? <PaymentAccessSection identity={{ email: user.email, username: user.username }} latestRequest={latestRequest} loading={requests.isPending} /> : null}
+        {!access.hasAccess ? <PaymentAccessSection identity={{ email: user.email, username: user.username }} latestRequest={latestRequest} loading={requests.isPending} onRetry={() => void requests.refetch()} requestError={requests.isError} /> : null}
       </div>
     </main>
   );
 }
 
-function PaymentAccessSection({ identity, latestRequest, loading }: { identity: { email: string; username: string }; latestRequest: PaymentRequest | null; loading: boolean }) {
+function PaymentAccessSection({ identity, latestRequest, loading, onRetry, requestError }: { identity: { email: string; username: string }; latestRequest: PaymentRequest | null; loading: boolean; onRetry: () => void; requestError: boolean }) {
   const [showForm, setShowForm] = useState(false);
   const [created, setCreated] = useState<{ request: PaymentRequest; whatsappUrl: string } | null>(null);
   const queryClient = useQueryClient();
@@ -84,7 +84,8 @@ function PaymentAccessSection({ identity, latestRequest, loading }: { identity: 
   const whatsappUrl = created?.whatsappUrl ?? (savedRequest ? buildWhatsAppUrl(savedRequest, identity) : null);
 
   return <section aria-labelledby="payment-title" className="mt-6 rounded-2xl border border-white/8 bg-[#090a14] p-5 sm:p-7">
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-200">Acceso Founders</p><h2 className="mt-2 text-2xl font-semibold text-white" id="payment-title">Pago único · USD 27</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">Cargá los datos de tu pago y enviá la solicitud. WhatsApp queda disponible después como canal opcional de soporte y verificación.</p></div>{!underReview && !loading ? <button className="min-h-12 shrink-0 rounded-xl bg-violet-400 px-5 text-sm font-bold text-[#150c2d] hover:bg-violet-300" onClick={() => setShowForm((value) => !value)} type="button">{showForm ? "Cerrar formulario" : "Obtener acceso"}</button> : null}</div>
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-200">Acceso Founders</p><h2 className="mt-2 text-2xl font-semibold text-white" id="payment-title">Pago único · USD 27</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">Cargá los datos de tu pago y enviá la solicitud. WhatsApp queda disponible después como canal opcional de soporte y verificación.</p></div>{!underReview && !loading && !requestError ? <button className="min-h-12 shrink-0 rounded-xl bg-violet-400 px-5 text-sm font-bold text-[#150c2d] hover:bg-violet-300" onClick={() => setShowForm((value) => !value)} type="button">{showForm ? "Cerrar formulario" : "Obtener acceso"}</button> : null}</div>
+    {requestError ? <div className="mt-6 rounded-xl border border-rose-300/20 bg-rose-300/[0.06] p-4 text-sm leading-6 text-rose-100" role="alert"><p>No pudimos consultar el estado de tus solicitudes. Reintentá antes de iniciar una nueva.</p><button className="mt-3 min-h-11 rounded-xl border border-rose-200/25 px-4 font-semibold hover:bg-rose-200/10" onClick={onRetry} type="button">Reintentar</button></div> : null}
     {created ? <WhatsAppConfirmation request={created.request} /> : null}
     {!created && underReview ? <div className="mt-6 rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-4 text-sm leading-6 text-amber-100"><strong>Solicitud en revisión.</strong> El equipo usará el registro de la plataforma para validar el pago. {latestRequest?.status === "NEEDS_REVIEW" ? "Revisá las notas del administrador y contactá soporte si te solicitaron información adicional." : "No hace falta crear otra solicitud."}</div> : null}
     {underReview ? <SubmittedActions whatsappUrl={whatsappUrl} /> : null}
@@ -149,7 +150,7 @@ function WhatsAppConfirmation({ request }: { request: PaymentRequest }) {
 }
 
 function SubmittedActions({ whatsappUrl }: { whatsappUrl: string | null }) {
-  return <div className="mt-4 grid gap-3 sm:grid-cols-2"><button className="min-h-12 w-full cursor-default rounded-xl bg-violet-400/70 px-4 text-sm font-bold text-[#150c2d]" disabled type="button"><span aria-hidden="true">✓ </span>SOLICITUD ENVIADA</button><button className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-violet-300/25 bg-violet-400/10 px-4 text-sm font-bold text-violet-100 hover:bg-violet-400/15 disabled:cursor-not-allowed disabled:opacity-50" disabled={!whatsappUrl} onClick={() => whatsappUrl && openWhatsApp(whatsappUrl)} type="button">CONTACTAR POR WHATSAPP <ExternalLink className="h-4 w-4" /></button></div>;
+  return <div className="mt-4 grid gap-3 sm:grid-cols-2"><div className="flex min-h-12 w-full items-center justify-center rounded-xl bg-violet-400/70 px-4 text-sm font-bold text-[#150c2d]" role="status"><span aria-hidden="true">✓ </span>SOLICITUD ENVIADA</div><button className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-violet-300/25 bg-violet-400/10 px-4 text-sm font-bold text-violet-100 hover:bg-violet-400/15 disabled:cursor-not-allowed disabled:opacity-50" disabled={!whatsappUrl} onClick={() => whatsappUrl && openWhatsApp(whatsappUrl)} type="button">CONTACTAR POR WHATSAPP <ExternalLink className="h-4 w-4" /></button></div>;
 }
 
 function CopyPaymentValue({ label, value }: { label: string; value: string | null }) {

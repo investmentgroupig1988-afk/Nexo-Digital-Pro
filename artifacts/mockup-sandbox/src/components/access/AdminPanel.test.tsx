@@ -91,6 +91,21 @@ describe("administración de pagos y accesos", () => {
     fireEvent.submit(form as HTMLFormElement);
     await waitFor(() => expect(api.grantManualAccess).toHaveBeenCalledWith(member.id, expect.objectContaining({ plan: "PARTNER" })));
   });
+
+  it("keeps row actions touch-friendly and translates internal audit event names", async () => {
+    api.getAdminAudit.mockResolvedValue({ audit: [{ id: "audit-1", action: "ROLE_CHANGED", actor: account.user, target: member, createdAt: "2026-01-03T00:00:00.000Z" }] });
+    renderPanel();
+
+    expect((await screen.findByRole("button", { name: "Bloquear" })).className).toContain("min-h-11");
+    expect(await screen.findByText("Rol modificado")).toBeTruthy();
+    expect(screen.queryByText("ROLE_CHANGED")).toBeNull();
+  });
+
+  it("shows a clear message when recent activity cannot be loaded", async () => {
+    api.getAdminAudit.mockRejectedValue(new Error("network unavailable"));
+    renderPanel();
+    expect(await screen.findByText("No se pudo cargar la actividad reciente.")).toBeTruthy();
+  });
 });
 
 function renderPanel() {
