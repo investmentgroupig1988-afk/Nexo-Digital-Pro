@@ -53,7 +53,7 @@ corepack pnpm run db:migrate
 
 6. Registrar una cuenta desde staging. Agregar temporalmente `ADMIN_EMAIL=<email-de-esa-cuenta>` al servicio API, ejecutar en la shell `corepack pnpm run admin:bootstrap`, comprobar que la cuenta ve Administración, y eliminar `ADMIN_EMAIL` del dashboard.
 
-Para producción, preferir frontend y API en subdominios del mismo dominio registrable. Configurar entonces `AUTH_COOKIE_DOMAIN=.<dominio>` y `AUTH_COOKIE_SAME_SITE=lax`. Si frontend y API están en sitios distintos, `none` exige HTTPS y algunos navegadores pueden limitar cookies de terceros.
+Para staging y producción, preferir frontend y API en subdominios del mismo dominio registrable. Usar `AUTH_COOKIE_SAME_SITE=lax` y dejar `AUTH_COOKIE_DOMAIN` vacío salvo necesidad demostrada de compartir la cookie con otros hosts; la cookie host-only de la API es suficiente y reduce exposición. Si frontend y API están en sitios distintos, `none` exige HTTPS y aun así los navegadores móviles pueden bloquearla como cookie de terceros: no es la solución recomendada para una Preview `vercel.app`.
 
 ## Pruebas de base de datos
 

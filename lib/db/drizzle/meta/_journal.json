@@ -29,6 +29,13 @@
       "when": 1787258215205,
       "tag": "0003_first_bloodscream",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787419200000,
+      "tag": "0004_signal_notification_outbox",
+      "breakpoints": true
     }
   ]
 }

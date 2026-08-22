@@ -238,6 +238,26 @@ export const signals = pgTable("signals", {
   check("signals_risk_reward_minimum", sql`${table.riskRewardRatio} >= 1.5`),
 ]);
 
+/** Provider-neutral outbox. Signals remain authoritative; providers only announce availability. */
+export const notificationDeliveries = pgTable("notification_deliveries", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  signalId: uuid("signal_id").notNull().references(() => signals.id, { onDelete: "cascade" }),
+  provider: varchar("provider", { length: 32 }).notNull(),
+  status: varchar("status", { length: 16 }).notNull().default("PENDING"),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
+  deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  lastError: varchar("last_error", { length: 255 }),
+  createdAt,
+  updatedAt,
+}, (table) => [
+  uniqueIndex("notification_deliveries_signal_provider_unique").on(table.signalId, table.provider),
+  index("notification_deliveries_pending_index").on(table.provider, table.status, table.nextAttemptAt),
+  check("notification_deliveries_provider_valid", sql`${table.provider} IN ('telegram')`),
+  check("notification_deliveries_status_valid", sql`${table.status} IN ('PENDING', 'SENDING', 'DELIVERED', 'FAILED')`),
+]);
+
 export const signalDirections = { long: "LONG", short: "SHORT" } as const;
 export const signalStatuses = { open: "OPEN", win: "WIN", loss: "LOSS", expired: "EXPIRED", cancelled: "CANCELLED" } as const;
 

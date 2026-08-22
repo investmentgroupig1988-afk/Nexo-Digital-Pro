@@ -14,7 +14,7 @@ El frontend no contiene claves de proveedores. `TWELVEDATA_API_KEY` es estrictam
 ## Antes de conectar servicios
 
 1. Crear un repositorio en GitHub y subir este proyecto sin `.env`, `node_modules`, `dist` ni archivos generados. `.gitignore` ya impide esos archivos.
-2. Elegir `main` como rama de producción. Para staging, crear una rama `staging` desde `main`.
+2. Elegir `main` como rama de producción. El staging estable usa `deploy-ready-v1`; este despliegue no fusiona ni modifica `main`.
 3. En GitHub, proteger `main`: requerir pull request y que el workflow **CI** sea exitoso antes de integrar cambios.
 4. El workflow `.github/workflows/ci.yml` se ejecuta en pull requests hacia `main` y en cada push a `main`. No necesita secretos ni despliega nada.
 
@@ -39,7 +39,7 @@ La versión de Node se fija en `>=24 <25` y pnpm queda fijado mediante `packageM
 
 ## Staging: Railway API
 
-Crear primero un proyecto y entorno **staging** en Railway, conectarlo al repositorio GitHub y elegir la rama `staging`. Usar el directorio raíz del repositorio (`.`). Railway encuentra `railway.json` en la raíz.
+Crear primero un proyecto y entorno **staging** en Railway, conectarlo al repositorio GitHub y elegir la rama `deploy-ready-v1`. Usar el directorio raíz del repositorio (`.`). Railway encuentra `railway.json` en la raíz.
 
 En el dashboard, confirmar estos valores (también están declarados en `railway.json`):
 
@@ -98,6 +98,42 @@ corepack pnpm run smoke:api
 ```
 
 Debe informar `API healthcheck passed`. Después, en el navegador, comprobar `GET /api/market?symbol=BTCUSDT`, velas e indicadores desde la interfaz. `XAUUSD` sólo debe probarse si configuraste una clave de Twelve Data válida y el plan/licencia del proveedor lo permite.
+
+## Staging móvil estable bajo el mismo sitio
+
+La causa probable del login móvil en Preview no es una omisión de `credentials`: el cliente ya usa `credentials: include`. Una página `*.vercel.app` y `api.nexodigitalpro.lat` son sitios distintos; la cookie `SameSite=Lax` no acompaña un `fetch` cross-site y los navegadores móviles pueden bloquear cookies de terceros incluso con `SameSite=None; Secure`. No cambiar auth para enmascarar esta topología.
+
+1. En el proyecto Vercel de staging, añadir `staging.nexodigitalpro.lat` y asignarlo a la rama de producción `deploy-ready-v1`.
+2. En el DNS autoritativo, crear para `staging` el CNAME exacto que muestre Vercel.
+3. Mantener `api.nexodigitalpro.lat` apuntando al Railway de este mismo entorno. Si producción ya usa ese host, crear un API de staging separado para no mezclar base de datos ni secretos.
+4. En Vercel staging definir `VITE_API_BASE_URL=https://api.nexodigitalpro.lat` y redeployar.
+5. En Railway staging definir:
+
+```text
+BETTER_AUTH_URL=https://api.nexodigitalpro.lat
+CORS_ALLOWED_ORIGINS=https://staging.nexodigitalpro.lat
+AUTH_COOKIE_SAME_SITE=lax
+AUTH_COOKIE_DOMAIN=
+TRUST_PROXY_HOPS=1
+```
+
+Dejar `AUTH_COOKIE_DOMAIN` vacío conserva una cookie host-only para la API, más restrictiva y suficiente porque ambos hosts comparten el sitio `nexodigitalpro.lat`. `Secure` se activa con `NODE_ENV=production`. No usar `SameSite=None`, `*.vercel.app`, regex, reflexión de `Origin` ni `*`.
+
+Tras el redeploy, borrar datos anteriores del sitio en el móvil, abrir `https://staging.nexodigitalpro.lat`, iniciar sesión y comprobar que el `GET /api/me` siguiente responde 200. CORS debe devolver exactamente `Access-Control-Allow-Origin: https://staging.nexodigitalpro.lat` y `Access-Control-Allow-Credentials: true`.
+
+## Telegram V1
+
+Crear un bot con BotFather, añadirlo como administrador del canal con permiso para publicar y obtener el `chat_id`. Guardar sólo en Railway:
+
+```text
+TELEGRAM_BOT_TOKEN=<secreto de BotFather>
+TELEGRAM_CHAT_ID=<@canal_o_id>
+NOTIFICATION_PUBLIC_URL=https://staging.nexodigitalpro.lat/
+```
+
+No crear estas variables en Vercel, GitHub ni con prefijo `VITE_`. Con las tres presentes, el refresco crea una entrega persistente por señal/proveedor, la reclama atómicamente y reintenta fallos hasta cinco veces. El mensaje contiene únicamente `SEÑAL ACTIVA` y el enlace: Telegram no recibe activo, dirección, timeframe, entrada, SL, TP, indicadores, snapshot ni metodología. `signals` sigue siendo la fuente de verdad.
+
+Si falta cualquier variable, Telegram queda deshabilitado sin afectar el motor. Para rotar el token, revocarlo en BotFather, actualizar Railway y redeployar. La interfaz de proveedor permite añadir web push/PWA como otro adaptador y otra entrega de outbox sin cambiar el ciclo de señales.
 
 ## Promoción a producción
 

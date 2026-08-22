@@ -81,6 +81,9 @@ test("email signup atomically creates a credential account, session, and login-c
 
   const sessionCookie = loginResponse.headers.get("set-cookie")?.split(";", 1)[0];
   assert.ok(sessionCookie, "login must issue an HttpOnly session cookie");
+  const setCookie = loginResponse.headers.get("set-cookie") ?? "";
+  assert.match(setCookie, /HttpOnly/i);
+  assert.match(setCookie, /SameSite=Lax/i, "same-site staging must keep the session cookie first-party compatible");
   const logoutResponse = await auth.api.signOut({
     headers: new Headers({ cookie: sessionCookie }),
     asResponse: true,

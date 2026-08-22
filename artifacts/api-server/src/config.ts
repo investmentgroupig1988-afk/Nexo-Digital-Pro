@@ -87,6 +87,17 @@ function parseOptionalUrl(name: string): string | undefined {
   return normalizeOrigin(value, name);
 }
 
+function parseOptionalHttpUrl(name: string): string | undefined {
+  const value = process.env[name]?.trim();
+  if (!value) return undefined;
+  let parsed: URL;
+  try { parsed = new URL(value); } catch { throw new Error(`${name} must be an absolute http(s) URL.`); }
+  if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) {
+    throw new Error(`${name} must be an absolute http(s) URL without credentials.`);
+  }
+  return parsed.toString();
+}
+
 export const config = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: parsePositiveInteger("PORT", 5000),
@@ -107,4 +118,7 @@ export const config = {
   authCookieSameSite: parseCookieSameSite(),
   authRateLimitMax: parsePositiveInteger("AUTH_RATE_LIMIT_MAX", 10),
   authRateLimitWindowMs: 15 * 60_000,
+  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN?.trim() || undefined,
+  telegramChatId: process.env.TELEGRAM_CHAT_ID?.trim() || undefined,
+  notificationPublicUrl: parseOptionalHttpUrl("NOTIFICATION_PUBLIC_URL"),
 } as const;

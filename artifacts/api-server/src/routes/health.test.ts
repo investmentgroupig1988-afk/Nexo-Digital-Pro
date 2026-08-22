@@ -23,6 +23,7 @@ test("health endpoint is reachable and API responses have defensive headers", as
       headers: { Origin: "http://localhost:5173" },
     });
     assert.equal(allowedOrigin.headers.get("access-control-allow-origin"), "http://localhost:5173");
+    assert.equal(allowedOrigin.headers.get("access-control-allow-credentials"), "true");
 
     const deniedOrigin = await fetch(`http://127.0.0.1:${address.port}/api/healthz`, {
       headers: { Origin: "https://untrusted.example" },
