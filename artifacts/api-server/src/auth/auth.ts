@@ -9,6 +9,7 @@ import {
   verifications,
 } from "@workspace/db";
 import { config } from "../config";
+import { isEmailDeliveryConfigured, sendAuthEmail, type AuthEmailInput } from "../services/email";
 
 type AuthRuntimeConfig = Pick<
   typeof config,
@@ -24,6 +25,11 @@ export class AuthConfigurationError extends Error {
 
 let authInstance: ReturnType<typeof createAuthForDatabase> | undefined;
 
+type AuthEmailRuntime = {
+  send: (input: AuthEmailInput) => Promise<void>;
+  sendVerificationOnSignUp: boolean;
+};
+
 function assertAuthConfiguration(authConfig: AuthRuntimeConfig): void {
   if (!authConfig.databaseUrl) {
     throw new AuthConfigurationError("Persistence is not configured.");
@@ -36,7 +42,11 @@ function assertAuthConfiguration(authConfig: AuthRuntimeConfig): void {
   }
 }
 
-export function createAuthForDatabase(database: Parameters<typeof drizzleAdapter>[0], authConfig: AuthRuntimeConfig = config) {
+export function createAuthForDatabase(
+  database: Parameters<typeof drizzleAdapter>[0],
+  authConfig: AuthRuntimeConfig = config,
+  emailRuntime: AuthEmailRuntime = { send: sendAuthEmail, sendVerificationOnSignUp: isEmailDeliveryConfigured() },
+) {
   assertAuthConfiguration(authConfig);
   const trustedOrigins = [...new Set([authConfig.betterAuthUrl!, ...authConfig.corsOrigins])];
 
@@ -60,12 +70,18 @@ export function createAuthForDatabase(database: Parameters<typeof drizzleAdapter
       enabled: true,
       minPasswordLength: 12,
       maxPasswordLength: 128,
+      resetPasswordTokenExpiresIn: 60 * 60,
+      revokeSessionsOnPasswordReset: true,
+      sendResetPassword: async ({ user, token }) => emailRuntime.send({ to: user.email, token, kind: "password-reset" }),
     },
     emailVerification: {
-      sendOnSignUp: false,
+      sendOnSignUp: emailRuntime.sendVerificationOnSignUp,
+      expiresIn: 60 * 60,
+      autoSignInAfterVerification: false,
+      sendVerificationEmail: async ({ user, token }) => emailRuntime.send({ to: user.email, token, kind: "email-verification" }),
     },
     advanced: {
-      cookiePrefix: "nexo-digital-pro",
+      cookiePrefix: "trenoro",
       useSecureCookies: authConfig.nodeEnv === "production",
       defaultCookieAttributes: {
         httpOnly: true,
@@ -79,6 +95,10 @@ export function createAuthForDatabase(database: Parameters<typeof drizzleAdapter
         role: { type: "string", input: false, defaultValue: "user" },
         status: { type: "string", input: false, defaultValue: "active" },
         lastLoginAt: { type: "date", input: false, required: false },
+        termsVersion: { type: "string", input: true, required: false },
+        privacyVersion: { type: "string", input: true, required: false },
+        legalAcceptedAt: { type: "date", input: true, required: false },
+        adultConfirmedAt: { type: "date", input: true, required: false },
       },
     },
     plugins: [

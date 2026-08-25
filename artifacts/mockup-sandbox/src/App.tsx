@@ -6,11 +6,24 @@ import { AdminPanel } from "@/components/access/AdminPanel";
 import { AuthScreen } from "@/components/access/AuthScreen";
 import { PublicLanding } from "@/components/access/PublicLanding";
 import { MarketDashboard } from "@/components/market/MarketDashboard";
+import { AuthRecovery } from "@/components/access/AuthRecovery";
+import { LegalPage, type LegalPath } from "@/components/legal/LegalPages";
 
 type Page = "landing" | "login" | "register" | "account" | "dashboard" | "admin";
 
+const legalPaths = new Set<LegalPath>(["/terminos", "/privacidad", "/reembolsos", "/descargo-de-responsabilidad", "/propiedad-intelectual", "/contacto", "/arrepentimiento", "/baja-de-servicio"]);
+
 function App() {
-  const [page, setPage] = useState<Page>("landing");
+  const path = window.location.pathname.replace(/\/$/, "") || "/";
+  if (legalPaths.has(path as LegalPath)) return <LegalPage path={path as LegalPath} />;
+  if (path === "/recuperar-contrasena") return <AuthRecovery mode="request" />;
+  if (path === "/restablecer-contrasena") return <AuthRecovery mode="reset" />;
+  if (path === "/verificar-email") return <AuthRecovery mode="verify" />;
+  return <ProductApp />;
+}
+
+function ProductApp() {
+  const [page, setPage] = useState<Page>(() => new URLSearchParams(window.location.search).get("acceso") === "login" ? "login" : "landing");
   const queryClient = useQueryClient();
   const account = useQuery({
     queryKey: ["account"],

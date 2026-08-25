@@ -31,7 +31,7 @@ test("health endpoint is reachable and API responses have defensive headers", as
     assert.equal(deniedOrigin.headers.get("access-control-allow-origin"), null);
 
     const ephemeralPreview = await fetch(`http://127.0.0.1:${address.port}/api/healthz`, {
-      headers: { Origin: "https://nexo-random-preview.vercel.app" },
+      headers: { Origin: "https://untrusted-random-preview.vercel.app" },
     });
     assert.equal(ephemeralPreview.headers.get("access-control-allow-origin"), null);
   } finally {

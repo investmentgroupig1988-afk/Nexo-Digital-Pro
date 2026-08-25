@@ -5,11 +5,11 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { GetMarketSignalSymbol } from './getMarketSignalSymbol';
 
 export type GetMarketSignalParams = {
 /**
- * Market symbol, for example BTCUSDT or XAUUSD
- * @pattern ^[A-Za-z0-9]{2,20}$
+ * Commercial market symbol. Only BTCUSDT is enabled.
  */
-symbol?: string;
+symbol?: GetMarketSignalSymbol;
 };

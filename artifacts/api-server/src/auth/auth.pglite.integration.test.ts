@@ -4,18 +4,22 @@ import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { after, before, test } from "node:test";
 import { PGlite } from "@electric-sql/pglite";
+import { createEmailVerificationToken } from "better-auth/api";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { accounts, sessions, users, verifications } from "@workspace/db";
 import { createAuthForDatabase } from "./auth";
+import type { AuthEmailInput } from "../services/email";
 
 const migrationFolder = resolve(import.meta.dirname, "../../../../lib/db/drizzle");
 const origin = "http://127.0.0.1";
 const testPassword = "correct-password-for-isolated-postgres-test";
+const authSecret = "isolated-auth-test-secret-that-is-at-least-thirty-two-characters";
 
 let pglite: PGlite;
 let database: ReturnType<typeof drizzle>;
 let auth: ReturnType<typeof createAuthForDatabase>;
+const sentAuthEmails: AuthEmailInput[] = [];
 
 before(async () => {
   pglite = new PGlite();
@@ -26,11 +30,14 @@ before(async () => {
     // PGlite is in-memory and never contacts a network database.
     databaseUrl: "postgresql://isolated-auth-test",
     betterAuthUrl: origin,
-    betterAuthSecret: "isolated-auth-test-secret-that-is-at-least-thirty-two-characters",
+    betterAuthSecret: authSecret,
     corsOrigins: new Set([origin]),
     nodeEnv: "test",
     authCookieSameSite: "lax",
     authCookieDomain: undefined,
+  }, {
+    send: async (input) => { sentAuthEmails.push(input); },
+    sendVerificationOnSignUp: false,
   });
 });
 
@@ -113,9 +120,124 @@ test("duplicate email and username are rejected without producing a second ident
   assert.equal(matchingUsers.length, 1);
 });
 
+test("password reset is expiring, single-use, revokes sessions, and does not enumerate unknown email", async () => {
+  sentAuthEmails.length = 0;
+  const suffix = randomUUID();
+  const email = `reset-${suffix}@example.test`;
+  const username = `reset_${suffix.replaceAll("-", "").slice(0, 20)}`;
+  const newPassword = "replacement-password-for-isolated-postgres-test";
+  const signup = await auth.api.signUpEmail({
+    body: { email, password: testPassword, username, displayUsername: username, name: "Reset Test" },
+    headers: new Headers({ origin }),
+  });
+
+  await auth.api.requestPasswordReset({
+    body: { email, redirectTo: `${origin}/restablecer-contrasena` },
+    headers: new Headers({ origin }),
+  });
+  const delivery = sentAuthEmails.at(-1);
+  assert.ok(delivery);
+  assert.equal(delivery.kind, "password-reset");
+  assert.equal(delivery.to, email);
+  assert.ok(delivery.token.length >= 16);
+
+  const [storedToken] = await database.select().from(verifications);
+  assert.ok(storedToken?.expiresAt.getTime() > Date.now());
+  assert.ok(storedToken.expiresAt.getTime() <= Date.now() + 60 * 60 * 1_000 + 5_000);
+
+  await database.update(verifications).set({ expiresAt: new Date(Date.now() - 1_000) }).where(eq(verifications.id, storedToken.id));
+  const expired = await auth.api.resetPassword({
+    body: { token: delivery.token, newPassword },
+    headers: new Headers({ origin }),
+    asResponse: true,
+  });
+  assert.ok(expired.status >= 400, "an expired reset token must be rejected");
+
+  await auth.api.requestPasswordReset({
+    body: { email, redirectTo: `${origin}/restablecer-contrasena` },
+    headers: new Headers({ origin }),
+  });
+  const validDelivery = sentAuthEmails.at(-1);
+  assert.ok(validDelivery);
+  assert.notEqual(validDelivery.token, delivery.token);
+
+  const reset = await auth.api.resetPassword({
+    body: { token: validDelivery.token, newPassword },
+    headers: new Headers({ origin }),
+    asResponse: true,
+  });
+  assert.equal(reset.status, 200);
+  assert.equal((await database.select().from(sessions).where(eq(sessions.userId, signup.user.id))).length, 0);
+
+  const replay = await auth.api.resetPassword({
+    body: { token: validDelivery.token, newPassword: "another-replacement-password-for-test" },
+    headers: new Headers({ origin }),
+    asResponse: true,
+  });
+  assert.ok(replay.status >= 400, "the reset token must be single-use");
+
+  const oldLogin = await auth.api.signInEmail({ body: { email, password: testPassword }, headers: new Headers({ origin }), asResponse: true });
+  const newLogin = await auth.api.signInEmail({ body: { email, password: newPassword }, headers: new Headers({ origin }), asResponse: true });
+  assert.ok(oldLogin.status >= 400);
+  assert.equal(newLogin.status, 200);
+
+  const deliveriesBeforeUnknown = sentAuthEmails.length;
+  await auth.api.requestPasswordReset({
+    body: { email: `unknown-${suffix}@example.test`, redirectTo: `${origin}/restablecer-contrasena` },
+    headers: new Headers({ origin }),
+  });
+  assert.equal(sentAuthEmails.length, deliveriesBeforeUnknown, "unknown accounts must not trigger delivery or reveal existence");
+});
+
+test("email verification uses a signed one-hour token and is idempotent after its first effect", async () => {
+  sentAuthEmails.length = 0;
+  const suffix = randomUUID();
+  const email = `verify-${suffix}@example.test`;
+  const username = `verify_${suffix.replaceAll("-", "").slice(0, 19)}`;
+  const signup = await auth.api.signUpEmail({
+    body: { email, password: testPassword, username, displayUsername: username, name: "Verification Test" },
+    headers: new Headers({ origin }),
+  });
+  assert.equal(signup.user.emailVerified, false);
+
+  const expiredToken = await createEmailVerificationToken(authSecret, email, undefined, -1);
+  const expired = await auth.api.verifyEmail({ query: { token: expiredToken }, headers: new Headers({ origin }), asResponse: true });
+  assert.ok(expired.status >= 400, "an expired email verification token must be rejected");
+
+  await auth.api.sendVerificationEmail({
+    body: { email, callbackURL: `${origin}/verificar-email` },
+    headers: new Headers({ origin }),
+  });
+  const delivery = sentAuthEmails.at(-1);
+  assert.ok(delivery);
+  assert.equal(delivery.kind, "email-verification");
+  assert.equal(delivery.to, email);
+  const tokenParts = delivery.token.split(".");
+  assert.equal(tokenParts.length, 3, "Better Auth email verification must use a signed JWT");
+  const tokenPayload = JSON.parse(Buffer.from(tokenParts[1]!, "base64url").toString("utf8")) as { exp: number; iat: number };
+  assert.equal(tokenPayload.exp - tokenPayload.iat, 60 * 60);
+  assert.equal((await database.select().from(verifications)).length, 0, "the signed token must not be stored in plaintext");
+
+  const signature = tokenParts[2]!;
+  const tamperedToken = [tokenParts[0], tokenParts[1], `${signature[0] === "a" ? "b" : "a"}${signature.slice(1)}`].join(".");
+  const tampered = await auth.api.verifyEmail({ query: { token: tamperedToken }, headers: new Headers({ origin }), asResponse: true });
+  assert.ok(tampered.status >= 400, "a token with a modified signature must be rejected");
+
+  const verified = await auth.api.verifyEmail({ query: { token: delivery.token }, headers: new Headers({ origin }), asResponse: true });
+  assert.equal(verified.status, 200);
+  const [storedUser] = await database.select().from(users).where(eq(users.id, signup.user.id));
+  assert.equal(storedUser.emailVerified, true);
+
+  const replay = await auth.api.verifyEmail({ query: { token: delivery.token }, headers: new Headers({ origin }), asResponse: true });
+  assert.equal(replay.status, 200, "Better Auth treats a replay for an already verified account as an idempotent success");
+  const [userAfterReplay] = await database.select().from(users).where(eq(users.id, signup.user.id));
+  assert.equal(userAfterReplay.emailVerified, true);
+  assert.equal((await database.select().from(verifications)).length, 0, "a replay must not create reusable verification state");
+});
+
 test("production auth emits a Secure, SameSite=Lax, host-only session cookie", async () => {
-  const apiOrigin = "https://api.nexodigitalpro.lat";
-  const frontendOrigin = "https://staging.nexodigitalpro.lat";
+  const apiOrigin = "https://api-staging.trenoro.com";
+  const frontendOrigin = "https://staging.trenoro.com";
   const productionAuth = createAuthForDatabase(database, {
     databaseUrl: "postgresql://isolated-production-cookie-test",
     betterAuthUrl: apiOrigin,

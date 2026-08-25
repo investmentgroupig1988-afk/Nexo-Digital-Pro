@@ -11,5 +11,4 @@ export type HistoricalCandlesProvider = typeof HistoricalCandlesProvider[keyof t
 
 export const HistoricalCandlesProvider = {
   binance: 'binance',
-  twelvedata: 'twelvedata',
 } as const;

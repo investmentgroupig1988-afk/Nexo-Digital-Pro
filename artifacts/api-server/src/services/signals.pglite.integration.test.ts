@@ -60,9 +60,11 @@ test("notification outbox deduplicates repeated and concurrent dispatches", asyn
   await database.insert(signals).values({ symbol: "BTCUSDT", timeframe: "5m", direction: "LONG", entryPrice: "100", stopLoss: "90", takeProfit: "115", riskRewardRatio: "1.5", status: "OPEN", openedAt: now, expiresAt: new Date(now.getTime() + 3_600_000), result: "OPEN", strategyVersion: "NOTIFICATION_TEST", configurationFingerprint: "n".repeat(64), indicatorSnapshot: {} });
   let sends = 0;
   const provider: NotificationProvider = { name: "telegram", async sendSignalActive() { sends += 1; } };
-  await Promise.all([dispatchSignalNotifications(provider, serviceDatabase, new Date(), "https://staging.nexodigitalpro.lat/"), dispatchSignalNotifications(provider, serviceDatabase, new Date(), "https://staging.nexodigitalpro.lat/")]);
-  await dispatchSignalNotifications(provider, serviceDatabase, new Date(), "https://staging.nexodigitalpro.lat/");
+  const concurrent = await Promise.all([dispatchSignalNotifications(provider, serviceDatabase, new Date(), "https://staging.trenoro.com/"), dispatchSignalNotifications(provider, serviceDatabase, new Date(), "https://staging.trenoro.com/")]);
+  const repeated = await dispatchSignalNotifications(provider, serviceDatabase, new Date(), "https://staging.trenoro.com/");
   assert.equal(sends, 1);
+  assert.equal(concurrent.reduce((sum, result) => sum + result.queued, 0), 1);
+  assert.equal(concurrent.reduce((sum, result) => sum + result.delivered, 0) + repeated.delivered, 1);
   const deliveries = await database.select().from(notificationDeliveries);
   assert.equal(deliveries.length, 1);
   assert.equal(deliveries[0].status, "DELIVERED");
@@ -75,10 +77,12 @@ test("notification outbox recovers a stale claim after an interrupted deploy", a
   let sends = 0;
   const provider: NotificationProvider = { name: "telegram", async sendSignalActive() { sends += 1; } };
 
-  await dispatchSignalNotifications(provider, serviceDatabase, now, "https://staging.nexodigitalpro.lat/");
+  const result = await dispatchSignalNotifications(provider, serviceDatabase, now, "https://staging.trenoro.com/");
 
   const delivery = (await database.select().from(notificationDeliveries)).find((value) => value.signalId === signal.id);
   assert.equal(sends, 1);
+  assert.equal(result.recoveredClaims, 1);
+  assert.equal(result.delivered, 1);
   assert.equal(delivery?.status, "DELIVERED");
   assert.ok(delivery?.deliveredAt);
 });

@@ -22,9 +22,11 @@ import {
   type PaymentRequestStatus,
 } from "@workspace/db";
 import type { AuditContext } from "./audit";
+import { config } from "../config";
+import { FOUNDERS_OFFER, PRODUCT_DISPLAY_NAME } from "@workspace/product";
 
-export const FOUNDERS_PRICE_USD = "27";
-export const SUPPORT_WHATSAPP_NUMBER = "5491151550781";
+export const FOUNDERS_PRICE_USD = String(FOUNDERS_OFFER.usdtPrice);
+export const FOUNDERS_PRICE_ARS = String(FOUNDERS_OFFER.argentina.price);
 export const USDT_TRC20_DESTINATION = "TJmF8D7twrHckM1LfqPwh64WgYcSgURKRS";
 export const MAX_PROOF_BYTES = 5 * 1024 * 1024;
 
@@ -343,7 +345,10 @@ function normalizeInput(input: CreatePaymentRequestInput) {
   const proof = input.proof ? normalizeProof(input.proof) : null;
   if (method === paymentRequestMethods.mercadoPagoTransfer) {
     if (!payerName || payerName.length > 160) throw new PaymentRequestError("Ingresá el nombre del pagador.");
-    if (!proof) throw new PaymentRequestError("El comprobante es obligatorio para Mercado Pago o transferencia.");
+    if (!proof) throw new PaymentRequestError("El comprobante es obligatorio para la transferencia Argentina.");
+    if (Math.abs(Number(amount) - FOUNDERS_OFFER.argentina.price) > 0.00000001) {
+      throw new PaymentRequestError("El importe Founders por transferencia argentina es $40.500 ARS.");
+    }
   }
   if (method === paymentRequestMethods.usdtTrc20) {
     if (!/^[a-fA-F0-9]{64}$/.test(referenceOrTxid)) throw new PaymentRequestError("El TXID de TRC20 debe contener 64 caracteres hexadecimales.");
@@ -437,10 +442,10 @@ function serializePaymentRequest(value: PublicPaymentRequestRow) {
   };
 }
 
-function buildWhatsAppUrl(request: Pick<typeof paymentRequests.$inferSelect, "id" | "method" | "amount" | "currency" | "referenceOrTxid" | "proofFileName">, identity: PaymentIdentity): string {
-  const method = request.method === paymentRequestMethods.usdtTrc20 ? "USDT TRC20" : "Mercado Pago / transferencia";
+function buildWhatsAppUrl(request: Pick<typeof paymentRequests.$inferSelect, "id" | "method" | "amount" | "currency" | "referenceOrTxid" | "proofFileName">, identity: PaymentIdentity): string | null {
+  const method = request.method === paymentRequestMethods.usdtTrc20 ? "USDT TRC20" : "Transferencia Argentina";
   const message = [
-    "Hola, solicito la verificación de mi acceso Founders a Nexo Digital Pro.",
+    `Hola, solicito la verificación de mi acceso Founders a ${PRODUCT_DISPLAY_NAME}.`,
     `ID de solicitud: ${request.id}`,
     `Usuario: ${identity.username}`,
     `Email: ${identity.email}`,
@@ -450,7 +455,7 @@ function buildWhatsAppUrl(request: Pick<typeof paymentRequests.$inferSelect, "id
     `Referencia / TXID: ${request.referenceOrTxid}`,
     `Evidencia cargada en la plataforma: ${request.proofFileName ? "Sí" : "No (opcional para USDT)"}.`,
   ].filter((line): line is string => Boolean(line)).join("\n");
-  return `https://wa.me/${SUPPORT_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+  return config.supportWhatsappNumber ? `https://wa.me/${config.supportWhatsappNumber}?text=${encodeURIComponent(message)}` : null;
 }
 
 function formatAmount(value: string): string {

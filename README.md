@@ -1,6 +1,6 @@
-# Nexo Digital Pro
+# TRENORO
 
-Nexo Digital Pro es una aplicación React/Vite y API Express con dashboard comercial de señales persistidas para `BTCUSDT`. El motor usa datos reales e indicadores internos, no fuerza señales y no ejecuta operaciones. `XAUUSD` permanece bloqueado como próximo mercado.
+TRENORO es una aplicación React/Vite y API Express con dashboard comercial de señales persistidas para `BTCUSDT`. El motor usa datos reales e indicadores internos, no fuerza señales y no ejecuta operaciones. `XAUUSD` permanece bloqueado y no forma parte de este release candidate.
 
 ## Arquitectura actual
 
@@ -70,7 +70,7 @@ corepack pnpm run build
 Las pruebas de integración de auth no contactan ninguna DB de forma predeterminada. Sólo se habilitan con una base exclusiva cuyo nombre termina en `_test` y las dos variables siguientes:
 
 ```powershell
-$env:TEST_DATABASE_URL = "postgres://<usuario>:<password>@<host>:5432/nexo_digital_pro_test"
+$env:TEST_DATABASE_URL = "postgres://<usuario>:<password>@<host>:5432/trenoro_test"
 $env:RUN_DB_INTEGRATION_TESTS = "true"
 corepack pnpm run test
 ```

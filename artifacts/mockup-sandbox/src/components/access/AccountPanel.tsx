@@ -10,12 +10,12 @@ import {
 import { CheckCircle2, ExternalLink } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Brand } from "./PublicLanding";
+import { FOUNDERS_OFFER, PRODUCT_DISPLAY_NAME } from "@/config/product";
 
 const USDT_WALLET = "TJmF8D7twrHckM1LfqPwh64WgYcSgURKRS";
-const SUPPORT_WHATSAPP_NUMBER = "5491151550781";
 const configured = (value: string | undefined) => value?.trim() || null;
-const ARGENTINA_PAYMENT_DETAILS = { alias: configured(import.meta.env.VITE_PAYMENT_ALIAS), cbuCvu: configured(import.meta.env.VITE_PAYMENT_CBU_CVU), holder: configured(import.meta.env.VITE_PAYMENT_HOLDER) };
-const ARGENTINA_PAYMENTS_ENABLED = Boolean(ARGENTINA_PAYMENT_DETAILS.alias && ARGENTINA_PAYMENT_DETAILS.cbuCvu && ARGENTINA_PAYMENT_DETAILS.holder);
+const SUPPORT_WHATSAPP_NUMBER = configured(import.meta.env.VITE_SUPPORT_WHATSAPP_NUMBER);
+const ARGENTINA_PAYMENTS_ENABLED = import.meta.env.VITE_ARGENTINA_PAYMENTS_ENABLED === "true";
 const MAX_PROOF_BYTES = 5 * 1024 * 1024;
 const ACCEPTED_PROOF_TYPES = new Set(["application/pdf", "image/png", "image/jpeg", "image/webp"]);
 
@@ -69,7 +69,7 @@ export function AccountPanel({ account, onDashboard, onLogout, onAdmin }: Accoun
 
 function PaymentAccessSection({ identity, latestRequest, loading, onRetry, requestError }: { identity: { email: string; username: string }; latestRequest: PaymentRequest | null; loading: boolean; onRetry: () => void; requestError: boolean }) {
   const [showForm, setShowForm] = useState(false);
-  const [created, setCreated] = useState<{ request: PaymentRequest; whatsappUrl: string } | null>(null);
+  const [created, setCreated] = useState<{ request: PaymentRequest; whatsappUrl: string | null } | null>(null);
   const queryClient = useQueryClient();
   const mutation = useMutation({
     mutationFn: createPaymentRequest,
@@ -96,7 +96,6 @@ function PaymentAccessSection({ identity, latestRequest, loading, onRetry, reque
 
 function PaymentForm({ pending, error, onSubmit }: { pending: boolean; error: string | null; onSubmit: (input: CreatePaymentRequestInput) => void }) {
   const [method, setMethod] = useState<PaymentRequestMethod>(ARGENTINA_PAYMENTS_ENABLED ? "MERCADO_PAGO_TRANSFER" : "USDT_TRC20");
-  const [amount, setAmount] = useState(ARGENTINA_PAYMENTS_ENABLED ? "" : "27");
   const [declaredPaidAt, setDeclaredPaidAt] = useState(toLocalDateTimeInput(new Date()));
   const [reference, setReference] = useState("");
   const [payerName, setPayerName] = useState("");
@@ -110,11 +109,11 @@ function PaymentForm({ pending, error, onSubmit }: { pending: boolean; error: st
     event.preventDefault();
     setLocalError(null);
     try {
-      if (!isUsdt && !proof) throw new Error("Adjuntá el comprobante de Mercado Pago o transferencia.");
+      if (!isUsdt && !proof) throw new Error("Adjuntá el comprobante de la transferencia Argentina.");
       const encodedProof = proof ? await fileToProof(proof) : undefined;
       onSubmit({
         method,
-        amount: isUsdt ? "27" : amount,
+        amount: isUsdt ? String(FOUNDERS_OFFER.usdtPrice) : String(FOUNDERS_OFFER.argentina.price),
         declaredPaidAt: new Date(declaredPaidAt).toISOString(),
         referenceOrTxid: reference,
         payerName: isUsdt ? undefined : payerName,
@@ -127,10 +126,10 @@ function PaymentForm({ pending, error, onSubmit }: { pending: boolean; error: st
   };
 
   return <form className="mt-7 border-t border-white/8 pt-7" onSubmit={(event) => void submit(event)}>
-    <fieldset><legend className="text-sm font-semibold text-white">Elegí el método</legend><div className="mt-3 grid gap-3 sm:grid-cols-2"><MethodButton active={!isUsdt} detail={ARGENTINA_PAYMENTS_ENABLED ? "Argentina · importe en ARS" : "Próximamente · datos no configurados"} disabled={!ARGENTINA_PAYMENTS_ENABLED} label="Mercado Pago / transferencia" onClick={() => { setMethod("MERCADO_PAGO_TRANSFER"); setAmount(""); }} /><MethodButton active={isUsdt} detail="Internacional · red TRC20" label="USDT TRC20" onClick={() => { setMethod("USDT_TRC20"); setAmount("27"); }} /></div></fieldset>
-    {isUsdt ? <div className="mt-5 rounded-xl border border-violet-300/15 bg-violet-400/[0.055] p-4"><CopyPaymentValue label="Wallet destino · solo TRC20" value={USDT_WALLET} /><p className="mt-3 text-xs leading-5 text-slate-400">Importe Founders: 27 USDT. Verificá la red antes de enviar.</p></div> : <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.02] p-4"><p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-300">Datos de destino</p><div className="mt-3 grid gap-3 sm:grid-cols-2"><CopyPaymentValue label="Alias" value={ARGENTINA_PAYMENT_DETAILS.alias} /><CopyPaymentValue label="CBU/CVU" value={ARGENTINA_PAYMENT_DETAILS.cbuCvu} /><CopyPaymentValue label="Titular" value={ARGENTINA_PAYMENT_DETAILS.holder} /></div><p className="mt-3 text-xs leading-5 text-slate-500">{ARGENTINA_PAYMENT_DETAILS.alias && ARGENTINA_PAYMENT_DETAILS.cbuCvu && ARGENTINA_PAYMENT_DETAILS.holder ? "Verificá que los datos coincidan antes de transferir." : "Los datos oficiales se habilitarán aquí cuando estén configurados."}</p></div>}
+    <fieldset><legend className="text-sm font-semibold text-white">Elegí el método</legend><div className="mt-3 grid gap-3 sm:grid-cols-2"><MethodButton active={!isUsdt} detail={ARGENTINA_PAYMENTS_ENABLED ? "Argentina · importe fijo en ARS" : "Próximamente · deshabilitado"} disabled={!ARGENTINA_PAYMENTS_ENABLED} label="Transferencia Argentina" onClick={() => setMethod("MERCADO_PAGO_TRANSFER")} /><MethodButton active={isUsdt} detail="Internacional · red TRC20" label="USDT TRC20" onClick={() => setMethod("USDT_TRC20")} /></div></fieldset>
+    {isUsdt ? <div className="mt-5 rounded-xl border border-violet-300/15 bg-violet-400/[0.055] p-4"><CopyPaymentValue label="Wallet destino · solo TRC20" value={USDT_WALLET} /><p className="mt-3 text-xs leading-5 text-slate-400">Importe Founders: {FOUNDERS_OFFER.usdtPrice} USDT. Verificá la red antes de enviar.</p></div> : <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.02] p-4"><p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-300">Datos de transferencia</p><p className="mt-3 text-2xl font-bold text-white">{FOUNDERS_OFFER.argentina.displayPrice}</p><p className="mt-1 text-xs leading-5 text-slate-400">Referencia comercial fija: {FOUNDERS_OFFER.argentina.displayReference}. No es una cotización oficial ni dinámica.</p><div className="mt-4 grid gap-3 sm:grid-cols-2"><CopyPaymentValue label="Alias" value={FOUNDERS_OFFER.argentina.alias} /><CopyPaymentValue label="CVU" value={FOUNDERS_OFFER.argentina.cvu} /><CopyPaymentValue label="Titular" value={FOUNDERS_OFFER.argentina.holder} /></div><p className="mt-3 text-xs leading-5 text-slate-500">Verificá que los datos coincidan antes de transferir y adjuntá el comprobante para revisión.</p></div>}
     <div className="mt-6 grid gap-4 sm:grid-cols-2">
-      {!isUsdt ? <Field id={`${fieldId}-amount`} label="Importe abonado (ARS)"><input className={inputClass} id={`${fieldId}-amount`} inputMode="decimal" onChange={(event) => setAmount(event.target.value)} placeholder="Ej.: 35000" required value={amount} /></Field> : <Field id={`${fieldId}-amount`} label="Importe"><input className={inputClass} disabled id={`${fieldId}-amount`} value="27 USDT" /></Field>}
+      {!isUsdt ? <Field id={`${fieldId}-amount`} label="Importe"><input className={inputClass} disabled id={`${fieldId}-amount`} value={FOUNDERS_OFFER.argentina.displayPrice} /></Field> : <Field id={`${fieldId}-amount`} label="Importe"><input className={inputClass} disabled id={`${fieldId}-amount`} value={`${FOUNDERS_OFFER.usdtPrice} USDT`} /></Field>}
       <Field id={`${fieldId}-date`} label="Fecha y hora del pago"><input className={inputClass} id={`${fieldId}-date`} max={toLocalDateTimeInput(new Date())} onChange={(event) => setDeclaredPaidAt(event.target.value)} required type="datetime-local" value={declaredPaidAt} /></Field>
       <Field id={`${fieldId}-reference`} label={isUsdt ? "TXID" : "Referencia u operación"}><input className={inputClass} id={`${fieldId}-reference`} maxLength={255} minLength={isUsdt ? 64 : 3} onChange={(event) => setReference(event.target.value)} placeholder={isUsdt ? "64 caracteres hexadecimales" : "Número de operación"} required value={reference} /></Field>
       {isUsdt ? <Field id={`${fieldId}-wallet`} label="Wallet remitente (opcional)"><input className={inputClass} id={`${fieldId}-wallet`} maxLength={128} onChange={(event) => setSenderWallet(event.target.value)} placeholder="Comienza con T" value={senderWallet} /></Field> : <Field id={`${fieldId}-payer`} label="Nombre del pagador"><input className={inputClass} id={`${fieldId}-payer`} maxLength={160} onChange={(event) => setPayerName(event.target.value)} required value={payerName} /></Field>}
@@ -142,6 +141,7 @@ function PaymentForm({ pending, error, onSubmit }: { pending: boolean; error: st
       <button aria-describedby={`${fieldId}-whatsapp-help`} className="min-h-12 w-full cursor-not-allowed rounded-xl border border-white/12 bg-white/[0.025] px-4 text-sm font-bold text-slate-500" disabled type="button">CONTACTAR POR WHATSAPP</button>
     </div>
     <p className="mt-3 max-w-2xl text-xs leading-5 text-slate-500" id={`${fieldId}-whatsapp-help`}>Solicitá el acceso para poder contactar por WhatsApp.</p>
+    <p className="mt-4 text-xs leading-6 text-slate-400">Comprás acceso Founders Lifetime por {isUsdt ? `${FOUNDERS_OFFER.usdtPrice} USDT mediante TRC20` : FOUNDERS_OFFER.argentina.displayPrice}, sin renovación automática. El acceso dura mientras esta modalidad y el servicio continúen operativos; no es una garantía de existencia perpetua. {PRODUCT_DISPLAY_NAME} no garantiza resultados. Consultá la <a className="font-semibold text-violet-200 underline" href="/reembolsos" target="_blank">política de reembolsos y arrepentimiento</a> antes de pagar.</p>
   </form>;
 }
 
@@ -153,7 +153,7 @@ function SubmittedActions({ whatsappUrl }: { whatsappUrl: string | null }) {
   return <div className="mt-4 grid gap-3 sm:grid-cols-2"><div className="flex min-h-12 w-full items-center justify-center rounded-xl bg-violet-400/70 px-4 text-sm font-bold text-[#150c2d]" role="status"><span aria-hidden="true">✓ </span>SOLICITUD ENVIADA</div><button className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-violet-300/25 bg-violet-400/10 px-4 text-sm font-bold text-violet-100 hover:bg-violet-400/15 disabled:cursor-not-allowed disabled:opacity-50" disabled={!whatsappUrl} onClick={() => whatsappUrl && openWhatsApp(whatsappUrl)} type="button">CONTACTAR POR WHATSAPP <ExternalLink className="h-4 w-4" /></button></div>;
 }
 
-function CopyPaymentValue({ label, value }: { label: string; value: string | null }) {
+function CopyPaymentValue({ label, value }: { label: string; value: string }) {
   const [feedback, setFeedback] = useState<"copied" | "error" | null>(null);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -162,7 +162,6 @@ function CopyPaymentValue({ label, value }: { label: string; value: string | nul
   }, []);
 
   const copy = async () => {
-    if (!value) return;
     try {
       await copyExactValue(value);
       setFeedback("copied");
@@ -173,7 +172,7 @@ function CopyPaymentValue({ label, value }: { label: string; value: string | nul
     feedbackTimer.current = setTimeout(() => setFeedback(null), 2_000);
   };
 
-  return <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.14em] text-violet-200">{label}</p><div className="mt-2 flex min-w-0 flex-col gap-2 min-[390px]:flex-row min-[390px]:items-center"><code className="min-w-0 flex-1 break-all rounded-lg bg-black/20 px-3 py-2.5 text-sm leading-6 text-slate-200">{value ?? "Pendiente de configuración"}</code><button aria-label={`Copiar ${label}`} className="min-h-11 w-full shrink-0 rounded-lg border border-violet-300/25 bg-violet-400/10 px-3 text-sm font-bold text-violet-100 hover:bg-violet-400/15 disabled:cursor-not-allowed disabled:border-white/8 disabled:bg-white/[0.02] disabled:text-slate-600 min-[390px]:w-auto min-[390px]:min-w-24" disabled={!value} onClick={() => void copy()} type="button">{feedback === "copied" ? "Copiado ✓" : feedback === "error" ? "No se pudo copiar" : "Copiar"}</button></div><span aria-live="polite" className="sr-only">{feedback === "copied" ? `${label} copiado` : feedback === "error" ? `No se pudo copiar ${label}` : ""}</span></div>;
+  return <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.14em] text-violet-200">{label}</p><div className="mt-2 flex min-w-0 flex-col gap-2 min-[390px]:flex-row min-[390px]:items-center"><code className="min-w-0 flex-1 break-all rounded-lg bg-black/20 px-3 py-2.5 text-sm leading-6 text-slate-200">{value}</code><button aria-label={`Copiar ${label}`} className="min-h-11 w-full shrink-0 rounded-lg border border-violet-300/25 bg-violet-400/10 px-3 text-sm font-bold text-violet-100 hover:bg-violet-400/15 min-[390px]:w-auto min-[390px]:min-w-24" onClick={() => void copy()} type="button">{feedback === "copied" ? "Copiado ✓" : feedback === "error" ? "No se pudo copiar" : "Copiar"}</button></div><span aria-live="polite" className="sr-only">{feedback === "copied" ? `${label} copiado` : feedback === "error" ? `No se pudo copiar ${label}` : ""}</span></div>;
 }
 
 function RequestSummary({ request }: { request: PaymentRequest | null }) {
@@ -191,7 +190,7 @@ function toLocalDateTimeInput(date: Date): string { const offset = date.getTimez
 function planLabel(plan: string | null): string { if (plan === "FOUNDERS_LIFETIME") return "Acceso Founders"; if (plan === "PARTNER") return "Acceso Partner"; if (plan === "TESTER") return "Acceso Tester"; if (plan === "COMPLIMENTARY") return "Acceso de cortesía"; return "Acceso privado"; }
 function accessTypeLabel(type: string): string { return type === "ADMIN_MANUAL" ? "Concesión administrativa" : type === "PAYMENT" ? "Pago verificado" : type === "PROMOTION" ? "Promoción" : type; }
 function paymentStatusLabel(status: PaymentRequest["status"]): string { return status === "PENDING" ? "Pendiente" : status === "APPROVED" ? "Aprobada" : status === "REJECTED" ? "Rechazada" : "Requiere información"; }
-function methodLabel(method: PaymentRequestMethod): string { return method === "USDT_TRC20" ? "USDT TRC20" : "Mercado Pago / transferencia"; }
+function methodLabel(method: PaymentRequestMethod): string { return method === "USDT_TRC20" ? "USDT TRC20" : "Transferencia Argentina"; }
 function requestStateTitle(request: PaymentRequest | null): string { if (!request) return "Sin acceso privado"; if (request.status === "PENDING") return "Solicitud en revisión"; if (request.status === "NEEDS_REVIEW") return "Necesitamos más información"; if (request.status === "APPROVED") return "Pago aprobado"; return "Sin acceso privado"; }
 function requestStateDescription(request: PaymentRequest | null): string { if (!request) return "Podés solicitar el acceso Founders desde esta cuenta."; if (request.status === "PENDING") return "Tu pago quedó registrado y está pendiente de validación administrativa."; if (request.status === "NEEDS_REVIEW") return "El equipo dejó una observación antes de tomar una decisión."; if (request.status === "APPROVED") return "La aprobación fue registrada. Volvé a enfocar o recargá esta página para actualizar tu acceso."; return "La solicitud anterior no concedió acceso. Podés corregir los datos y crear otra."; }
 function readableError(error: unknown): string { if (!(error instanceof Error)) return "No se pudo guardar la solicitud."; return error.message.replace(/^HTTP \d+ [^:]+:\s*/, ""); }
@@ -203,7 +202,7 @@ function openWhatsApp(url: string): void {
 
 function buildWhatsAppUrl(request: PaymentRequest, identity: { email: string; username: string }): string {
   const message = [
-    "Hola, solicito la verificación de mi acceso Founders a Nexo Digital Pro.",
+    `Hola, solicito la verificación de mi acceso Founders a ${PRODUCT_DISPLAY_NAME}.`,
     `ID de solicitud: ${request.id}`,
     `Usuario: ${identity.username}`,
     `Email: ${identity.email}`,
@@ -213,7 +212,7 @@ function buildWhatsAppUrl(request: PaymentRequest, identity: { email: string; us
     `Referencia / TXID: ${request.referenceOrTxid}`,
     `Evidencia cargada en la plataforma: ${request.proof ? "Sí" : "No (opcional para USDT)"}.`,
   ].filter((line): line is string => Boolean(line)).join("\n");
-  return `https://wa.me/${SUPPORT_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+  return SUPPORT_WHATSAPP_NUMBER ? `https://wa.me/${SUPPORT_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}` : "";
 }
 
 function formatAmount(value: string): string {

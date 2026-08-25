@@ -28,6 +28,8 @@ export function AuthScreen({ mode, onComplete, onSwitchMode, onBack }: AuthScree
           password,
           username: String(values.get("username") ?? ""),
           name: String(values.get("name") ?? "").trim() || undefined,
+          acceptTerms: true,
+          adultConfirmed: true,
         });
       } else {
         await login({ email, password });
@@ -56,6 +58,7 @@ export function AuthScreen({ mode, onComplete, onSwitchMode, onBack }: AuthScree
           {isRegister ? <Field label="Nombre (opcional)" name="name" autoComplete="name" maxLength={120} /> : null}
           <Field label="Email" name="email" type="email" autoComplete="email" maxLength={320} required />
           <Field label="Contraseña" name="password" type="password" autoComplete={isRegister ? "new-password" : "current-password"} minLength={isRegister ? 12 : 1} maxLength={128} helper={isRegister ? "Mínimo 12 caracteres." : undefined} required />
+          {isRegister ? <><label className="flex min-h-11 items-start gap-3 text-sm leading-6 text-slate-300"><input className="mt-1 h-5 w-5 shrink-0 accent-violet-400" name="acceptTerms" required type="checkbox" /> <span>He leído y acepto los <a className="font-semibold text-violet-200 underline" href="/terminos" target="_blank">Términos y Condiciones</a> y la <a className="font-semibold text-violet-200 underline" href="/privacidad" target="_blank">Política de Privacidad</a>.</span></label><label className="flex min-h-11 items-start gap-3 text-sm leading-6 text-slate-300"><input className="mt-1 h-5 w-5 shrink-0 accent-violet-400" name="adultConfirmed" required type="checkbox" /> <span>Declaro ser mayor de 18 años.</span></label></> : <a className="inline-flex min-h-11 items-center text-sm font-semibold text-violet-200 hover:text-violet-100" href="/recuperar-contrasena">Olvidé mi contraseña</a>}
           {error ? <p role="alert" className="rounded-xl border border-rose-400/25 bg-rose-400/8 p-3 text-sm leading-5 text-rose-100">{error}</p> : null}
           <button className="w-full rounded-xl bg-violet-400 px-4 py-3 text-sm font-bold text-[#130c29] transition hover:bg-violet-300 disabled:cursor-not-allowed disabled:opacity-60" disabled={submitting} type="submit">{submitting ? "Procesando…" : isRegister ? "Crear cuenta" : "Iniciar sesión"}</button>
         </form>

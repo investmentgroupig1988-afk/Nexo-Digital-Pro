@@ -19,6 +19,7 @@ export async function buildSignalDashboard(input: {
     .where(and(eq(signals.symbol, input.symbol), eq(signals.timeframe, input.timeframe), eq(signals.status, "OPEN")))
     .orderBy(desc(signals.openedAt)).limit(1);
   const evaluation = evaluateSignal(input);
+  let signalCreated = false;
 
   if (!active && evaluation.outcome !== "NO_SIGNAL") {
     try {
@@ -39,6 +40,7 @@ export async function buildSignalDashboard(input: {
         configurationFingerprint: evaluation.configurationFingerprint,
         indicatorSnapshot: evaluation.snapshot,
       }).returning();
+      signalCreated = true;
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
       [active] = await database.select().from(signals)
@@ -60,6 +62,7 @@ export async function buildSignalDashboard(input: {
   const directional = trends.filter((trend) => trend !== "sideways");
   const alignedCount = directional.length ? Math.max(directional.filter((trend) => trend === "bullish").length, directional.filter((trend) => trend === "bearish").length) : 0;
   return {
+    _internal: { analysisOutcome: evaluation.outcome, signalCreated },
     activeSignal: active ? publicSignal(active) : null,
     evaluation: active ? active.direction : "NO_SIGNAL",
     message: active ? null : "Esperando una configuración válida.",

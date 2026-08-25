@@ -18,6 +18,18 @@ test("valid configuration contains entry, SL, TP and respects minimum R:R", () =
   assert.ok(result.riskRewardRatio >= MINIMUM_RISK_REWARD);
 });
 
+test("valid bearish configuration produces a deterministic SHORT", () => {
+  const bearish = technical({ trend: "bearish", structure: "lower_high_and_lower_low" });
+  bearish.indicators = { ...bearish.indicators, ema20: 102, ema50: 104, ema200: 110, rsi14: 40 };
+  bearish.fibonacci = { ...bearish.fibonacci, direction: "downtrend" };
+  bearish.marketStructure = { ...bearish.marketStructure, support: 95, resistance: 105 };
+  const result = evaluateSignal({ symbol: "BTCUSDT", timeframe: "15m", candles: candles(), technical: bearish });
+  assert.equal(result.outcome, "SHORT");
+  assert.ok(result.stopLoss > result.entryPrice);
+  assert.ok(result.takeProfit < result.entryPrice);
+  assert.ok(result.riskRewardRatio >= MINIMUM_RISK_REWARD);
+});
+
 test("WIN requires TP before SL and an ambiguous candle resolves conservatively as LOSS", () => {
   const base = lifecycle();
   const win = resolveSignal(base, [candleAt(1, 100, 116, 99, 110)]);

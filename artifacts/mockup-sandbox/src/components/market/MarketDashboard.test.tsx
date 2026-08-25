@@ -7,7 +7,7 @@ vi.mock("@workspace/api-client-react", () => api);
 import { MarketDashboard } from "./MarketDashboard";
 
 const empty = { activeSignal: null, evaluation: "NO_SIGNAL", message: "Esperando una configuración válida.", context: { trend: "sideways", condition: "mixed", strength: "low" }, multiTimeframe: { trends: { "5m": "bullish", "15m": "bullish", "1h": "sideways", "4h": "bearish" }, alignedCount: 2, total: 4 }, metrics: { total: 0, wins: 0, losses: 0, winRate: null, lossRate: null, accumulatedReturnPct: null }, history: [] };
-const active = { ...empty, activeSignal: { id: "signal-1", symbol: "BTCUSDT", timeframe: "15m", direction: "LONG", entryPrice: "95000", stopLoss: "94000", takeProfit: "96500", riskRewardRatio: "1.5", status: "OPEN", openedAt: "2026-01-01T00:00:00.000Z", closedAt: null, returnPct: null, result: "OPEN", strategyVersion: "NEXO_CONFLUENCE_V1", createdAt: "2026-01-01T00:00:00.000Z" }, evaluation: "LONG" };
+const active = { ...empty, activeSignal: { id: "signal-1", symbol: "BTCUSDT", timeframe: "15m", direction: "LONG", entryPrice: "95000", stopLoss: "94000", takeProfit: "96500", riskRewardRatio: "1.5", status: "OPEN", openedAt: "2026-01-01T00:00:00.000Z", closedAt: null, returnPct: null, result: "OPEN", strategyVersion: "TRENORO_CONFLUENCE_V1", createdAt: "2026-01-01T00:00:00.000Z" }, evaluation: "LONG" };
 
 function renderDashboard() { const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } }); return render(<QueryClientProvider client={client}><MarketDashboard /></QueryClientProvider>); }
 beforeEach(() => { vi.clearAllMocks(); api.healthCheck.mockResolvedValue({ status: "ok" }); api.getSignalDashboard.mockResolvedValue(empty); });

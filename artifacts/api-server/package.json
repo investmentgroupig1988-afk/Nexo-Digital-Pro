@@ -13,6 +13,7 @@
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
+    "@workspace/product": "workspace:*",
     "axios": "^1.19.0",
     "better-auth": "^1.7.0",
     "cors": "^2.8.6",

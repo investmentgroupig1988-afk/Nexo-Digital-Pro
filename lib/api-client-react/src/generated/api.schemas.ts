@@ -79,51 +79,6 @@ export interface CryptoMarketData {
   assetClass: CryptoMarketDataAssetClass;
 }
 
-export type GoldMarketDataSymbol = typeof GoldMarketDataSymbol[keyof typeof GoldMarketDataSymbol];
-
-
-export const GoldMarketDataSymbol = {
-  XAUUSD: 'XAUUSD',
-} as const;
-
-export type GoldMarketDataCurrency = typeof GoldMarketDataCurrency[keyof typeof GoldMarketDataCurrency];
-
-
-export const GoldMarketDataCurrency = {
-  USD: 'USD',
-} as const;
-
-export type GoldMarketDataUnit = typeof GoldMarketDataUnit[keyof typeof GoldMarketDataUnit];
-
-
-export const GoldMarketDataUnit = {
-  troy_ounce: 'troy_ounce',
-} as const;
-
-export type GoldMarketDataProvider = typeof GoldMarketDataProvider[keyof typeof GoldMarketDataProvider];
-
-
-export const GoldMarketDataProvider = {
-  twelvedata: 'twelvedata',
-} as const;
-
-export type GoldMarketDataAssetClass = typeof GoldMarketDataAssetClass[keyof typeof GoldMarketDataAssetClass];
-
-
-export const GoldMarketDataAssetClass = {
-  gold: 'gold',
-} as const;
-
-export interface GoldMarketData {
-  symbol: GoldMarketDataSymbol;
-  price: number;
-  currency: GoldMarketDataCurrency;
-  unit: GoldMarketDataUnit;
-  updatedAt: string;
-  provider: GoldMarketDataProvider;
-  assetClass: GoldMarketDataAssetClass;
-}
-
 export interface HistoricalCandle {
   timestamp: string;
   open: number;
@@ -145,7 +100,6 @@ export type HistoricalCandlesSymbol = typeof HistoricalCandlesSymbol[keyof typeo
 
 export const HistoricalCandlesSymbol = {
   BTCUSDT: 'BTCUSDT',
-  XAUUSD: 'XAUUSD',
 } as const;
 
 export type HistoricalCandlesProvider = typeof HistoricalCandlesProvider[keyof typeof HistoricalCandlesProvider];
@@ -153,7 +107,16 @@ export type HistoricalCandlesProvider = typeof HistoricalCandlesProvider[keyof t
 
 export const HistoricalCandlesProvider = {
   binance: 'binance',
-  twelvedata: 'twelvedata',
+} as const;
+
+export type HistoricalCandlesAvailableTimeframesItem = typeof HistoricalCandlesAvailableTimeframesItem[keyof typeof HistoricalCandlesAvailableTimeframesItem];
+
+
+export const HistoricalCandlesAvailableTimeframesItem = {
+  '5m': '5m',
+  '15m': '15m',
+  '1h': '1h',
+  '4h': '4h',
 } as const;
 
 export interface HistoricalCandles {
@@ -162,42 +125,9 @@ export interface HistoricalCandles {
   timeframe: string;
   provider: HistoricalCandlesProvider;
   candles: HistoricalCandle[];
-  availableTimeframes: string[];
+  availableTimeframes: HistoricalCandlesAvailableTimeframesItem[];
   /** @nullable */
   message: null;
-}
-
-export type UnavailableHistoricalCandlesStatus = typeof UnavailableHistoricalCandlesStatus[keyof typeof UnavailableHistoricalCandlesStatus];
-
-
-export const UnavailableHistoricalCandlesStatus = {
-  UNAVAILABLE: 'UNAVAILABLE',
-} as const;
-
-export type UnavailableHistoricalCandlesSymbol = typeof UnavailableHistoricalCandlesSymbol[keyof typeof UnavailableHistoricalCandlesSymbol];
-
-
-export const UnavailableHistoricalCandlesSymbol = {
-  XAUUSD: 'XAUUSD',
-} as const;
-
-export type UnavailableHistoricalCandlesProvider = typeof UnavailableHistoricalCandlesProvider[keyof typeof UnavailableHistoricalCandlesProvider];
-
-
-export const UnavailableHistoricalCandlesProvider = {
-  twelvedata: 'twelvedata',
-} as const;
-
-export interface UnavailableHistoricalCandles {
-  status: UnavailableHistoricalCandlesStatus;
-  symbol: UnavailableHistoricalCandlesSymbol;
-  timeframe: string;
-  provider: UnavailableHistoricalCandlesProvider;
-  /** @maxItems 0 */
-  candles: unknown[];
-  /** @maxItems 0 */
-  availableTimeframes: unknown[];
-  message: string;
 }
 
 export type TechnicalIndicatorsResponseStatus = typeof TechnicalIndicatorsResponseStatus[keyof typeof TechnicalIndicatorsResponseStatus];
@@ -233,19 +163,31 @@ export interface TechnicalIndicatorsResponse {
 
 export type GetMarketSignalParams = {
 /**
- * Market symbol, for example BTCUSDT or XAUUSD
- * @pattern ^[A-Za-z0-9]{2,20}$
+ * Commercial market symbol. Only BTCUSDT is enabled.
  */
-symbol?: string;
+symbol?: GetMarketSignalSymbol;
 };
+
+export type GetMarketSignalSymbol = typeof GetMarketSignalSymbol[keyof typeof GetMarketSignalSymbol];
+
+
+export const GetMarketSignalSymbol = {
+  BTCUSDT: 'BTCUSDT',
+} as const;
 
 export type GetMarketDataParams = {
 /**
- * Market symbol, for example BTCUSDT or XAUUSD
- * @pattern ^[A-Za-z0-9]{2,20}$
+ * Commercial market symbol. Only BTCUSDT is enabled.
  */
-symbol?: string;
+symbol?: GetMarketDataSymbol;
 };
+
+export type GetMarketDataSymbol = typeof GetMarketDataSymbol[keyof typeof GetMarketDataSymbol];
+
+
+export const GetMarketDataSymbol = {
+  BTCUSDT: 'BTCUSDT',
+} as const;
 
 export type GetHistoricalCandlesParams = {
 symbol?: GetHistoricalCandlesSymbol;
@@ -262,14 +204,12 @@ export type GetHistoricalCandlesSymbol = typeof GetHistoricalCandlesSymbol[keyof
 
 export const GetHistoricalCandlesSymbol = {
   BTCUSDT: 'BTCUSDT',
-  XAUUSD: 'XAUUSD',
 } as const;
 
 export type GetHistoricalCandlesTimeframe = typeof GetHistoricalCandlesTimeframe[keyof typeof GetHistoricalCandlesTimeframe];
 
 
 export const GetHistoricalCandlesTimeframe = {
-  '1m': '1m',
   '5m': '5m',
   '15m': '15m',
   '1h': '1h',
@@ -286,14 +226,12 @@ export type GetTechnicalIndicatorsSymbol = typeof GetTechnicalIndicatorsSymbol[k
 
 export const GetTechnicalIndicatorsSymbol = {
   BTCUSDT: 'BTCUSDT',
-  XAUUSD: 'XAUUSD',
 } as const;
 
 export type GetTechnicalIndicatorsTimeframe = typeof GetTechnicalIndicatorsTimeframe[keyof typeof GetTechnicalIndicatorsTimeframe];
 
 
 export const GetTechnicalIndicatorsTimeframe = {
-  '1m': '1m',
   '5m': '5m',
   '15m': '15m',
   '1h': '1h',

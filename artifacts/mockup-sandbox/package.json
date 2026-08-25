@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@tanstack/react-query": "catalog:",
-    "@workspace/api-client-react": "workspace:*"
+    "@workspace/api-client-react": "workspace:*",
+    "@workspace/product": "workspace:*"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",

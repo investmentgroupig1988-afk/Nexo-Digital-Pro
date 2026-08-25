@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, deploy-ready-v1]
   push:
-    branches: [main]
+    branches: [main, deploy-ready-v1]
 
 permissions:
   contents: read
@@ -24,6 +24,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: "24.x"
+          package-manager-cache: false
 
       - name: Enable Corepack
         run: corepack enable

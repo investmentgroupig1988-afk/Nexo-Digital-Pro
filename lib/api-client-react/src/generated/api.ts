@@ -21,12 +21,10 @@ import type {
   GetMarketDataParams,
   GetMarketSignalParams,
   GetTechnicalIndicatorsParams,
-  GoldMarketData,
   HealthStatus,
   HistoricalCandles,
   MarketSignal,
-  TechnicalIndicatorsResponse,
-  UnavailableHistoricalCandles
+  TechnicalIndicatorsResponse
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -150,12 +148,12 @@ export const getGetMarketSignalUrl = (params?: GetMarketSignalParams,) => {
 }
 
 /**
- * Returns an indicative, non-executable market analysis. BTCUSDT uses Binance; XAUUSD returns current Twelve Data market data because no XAU/USD signal strategy is implemented.
+ * Returns an indicative, non-executable BTCUSDT market analysis using real Binance data.
  * @summary Get a market signal
  */
-export const getMarketSignal = async (params?: GetMarketSignalParams, options?: Parameters<typeof customFetch>[1]): Promise<MarketSignal | GoldMarketData> => {
+export const getMarketSignal = async (params?: GetMarketSignalParams, options?: Parameters<typeof customFetch>[1]): Promise<MarketSignal> => {
 
-  return customFetch<MarketSignal | GoldMarketData>(getGetMarketSignalUrl(params),
+  return customFetch<MarketSignal>(getGetMarketSignalUrl(params),
   {
     ...options,
     method: 'GET'
@@ -235,12 +233,12 @@ export const getGetMarketDataUrl = (params?: GetMarketDataParams,) => {
 }
 
 /**
- * Returns real current market data. BTC symbols use Binance; XAUUSD uses Twelve Data.
+ * Returns real current BTCUSDT market data from Binance.
  * @summary Get current market data
  */
-export const getMarketData = async (params?: GetMarketDataParams, options?: Parameters<typeof customFetch>[1]): Promise<CryptoMarketData | GoldMarketData> => {
+export const getMarketData = async (params?: GetMarketDataParams, options?: Parameters<typeof customFetch>[1]): Promise<CryptoMarketData> => {
 
-  return customFetch<CryptoMarketData | GoldMarketData>(getGetMarketDataUrl(params),
+  return customFetch<CryptoMarketData>(getGetMarketDataUrl(params),
   {
     ...options,
     method: 'GET'
@@ -320,12 +318,12 @@ export const getGetHistoricalCandlesUrl = (params?: GetHistoricalCandlesParams,)
 }
 
 /**
- * Returns normalized real OHLCV candles. BTCUSDT uses Binance and XAUUSD uses Twelve Data when TWELVEDATA_API_KEY is configured.
+ * Returns normalized real BTCUSDT OHLCV candles from Binance for commercial timeframes.
  * @summary Get historical real candles
  */
-export const getHistoricalCandles = async (params?: GetHistoricalCandlesParams, options?: Parameters<typeof customFetch>[1]): Promise<HistoricalCandles | UnavailableHistoricalCandles> => {
+export const getHistoricalCandles = async (params?: GetHistoricalCandlesParams, options?: Parameters<typeof customFetch>[1]): Promise<HistoricalCandles> => {
 
-  return customFetch<HistoricalCandles | UnavailableHistoricalCandles>(getGetHistoricalCandlesUrl(params),
+  return customFetch<HistoricalCandles>(getGetHistoricalCandlesUrl(params),
   {
     ...options,
     method: 'GET'

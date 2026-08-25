@@ -44,6 +44,7 @@ const identities = {
   whitespaceWallet: identity("whitespace-wallet", "user"),
   validWallet: identity("valid-wallet", "user"),
   invalidWallet: identity("invalid-wallet", "user"),
+  argentinaTamper: identity("argentina-tamper", "user"),
 };
 
 before(async () => {
@@ -65,22 +66,26 @@ after(async () => {
   await pglite.close();
 });
 
-test("user creates a persisted request before receiving the complete WhatsApp message", async () => {
+test("user creates a persisted request and WhatsApp remains optional", async () => {
   const result = await createPaymentRequest(identities.member, usdtRequest("a"), undefined, serviceDatabase);
   const [stored] = await database.select().from(paymentRequests).where(eq(paymentRequests.id, result.request.id));
   assert.ok(stored);
   assert.equal(stored.status, "PENDING");
   assert.equal(stored.proofDataBase64, null);
 
-  const message = new URL(result.whatsappUrl).searchParams.get("text") ?? "";
-  assert.match(message, new RegExp(result.request.id));
-  assert.match(message, new RegExp(identities.member.username));
-  assert.match(message, new RegExp(identities.member.email));
-  assert.match(message, /USDT TRC20/);
-  assert.match(message, /27 USDT/);
-  assert.match(message, /TJmF8D7twrHckM1LfqPwh64WgYcSgURKRS/);
-  assert.match(message, /Evidencia cargada en la plataforma/);
-  assert.doesNotMatch(message, /password|cookie|token/i);
+  if (result.whatsappUrl) {
+    const message = new URL(result.whatsappUrl).searchParams.get("text") ?? "";
+    assert.match(message, new RegExp(result.request.id));
+    assert.match(message, new RegExp(identities.member.username));
+    assert.match(message, new RegExp(identities.member.email));
+    assert.match(message, /USDT TRC20/);
+    assert.match(message, /27 USDT/);
+    assert.match(message, /TJmF8D7twrHckM1LfqPwh64WgYcSgURKRS/);
+    assert.match(message, /Evidencia cargada en la plataforma/);
+    assert.doesNotMatch(message, /password|cookie|token/i);
+  } else {
+    assert.equal(result.whatsappUrl, null);
+  }
 
   await assert.rejects(
     () => createPaymentRequest(identities.member, usdtRequest("c"), undefined, serviceDatabase),
@@ -172,6 +177,14 @@ test("REJECTED and NEEDS_REVIEW never grant product access", async () => {
   assert.equal((await database.select().from(accessGrants).where(eq(accessGrants.userId, identities.review.id))).length, 0);
 });
 
+test("the backend owns the fixed Argentina price and rejects a browser-supplied amount", async () => {
+  await assert.rejects(
+    () => createPaymentRequest(identities.argentinaTamper, { ...localRequest("operation-altered-price"), amount: "1" }, undefined, serviceDatabase),
+    /\$40\.500 ARS/,
+  );
+  assert.equal((await database.select().from(paymentRequests).where(eq(paymentRequests.userId, identities.argentinaTamper.id))).length, 0);
+});
+
 test("the server rejects forged evidence instead of trusting its filename or declared MIME", async () => {
   const countBefore = (await database.select({ id: paymentRequests.id }).from(paymentRequests)).length;
   await assert.rejects(() => createPaymentRequest(identities.rejected, {
@@ -212,7 +225,7 @@ function usdtRequest(character: string) {
 function localRequest(referenceOrTxid: string) {
   return {
     method: "MERCADO_PAGO_TRANSFER" as const,
-    amount: "35000",
+    amount: "40500",
     declaredPaidAt: new Date(),
     referenceOrTxid,
     payerName: "Persona de prueba",

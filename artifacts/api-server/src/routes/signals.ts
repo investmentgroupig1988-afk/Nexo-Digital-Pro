@@ -38,7 +38,8 @@ router.get("/signals/dashboard", async (req, res): Promise<void> => {
       const data = await getHistoricalCandles(symbol, candidate, 200);
       return [candidate, data.status === "OK" ? calculateTechnicalAnalysis(data.candles, data.provider).marketStructure.trend : null] as const;
     }));
-    res.json(await buildSignalDashboard({ symbol, timeframe, candles: market.candles, technical, historyTimeframe: historyScope === "all" ? null : historyScope, multiTimeframe: Object.fromEntries(contexts) }));
+    const { _internal: _runtimeOnly, ...dashboard } = await buildSignalDashboard({ symbol, timeframe, candles: market.candles, technical, historyTimeframe: historyScope === "all" ? null : historyScope, multiTimeframe: Object.fromEntries(contexts) });
+    res.json(dashboard);
   } catch (error) {
     req.log.error({ err: error, symbol }, "Unable to build signal dashboard");
     res.status(502).json({ error: "No se pudo actualizar el motor de señales." });

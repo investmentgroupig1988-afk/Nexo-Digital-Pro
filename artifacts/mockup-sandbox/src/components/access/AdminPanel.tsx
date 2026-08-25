@@ -1,16 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getAdminAudit,
+  getAdminConsumerRequests,
   getAdminPaymentRequests,
+  getAdminReadiness,
+  getAdminSignalEngineHealth,
   getAdminUsers,
   grantManualAccess,
   restoreAccess,
   reviewPaymentRequest,
+  reviewConsumerRequest,
   revokeAccess,
   setUserBlocked,
   type AccountResponse,
   type AdminPaymentRequest,
   type AdminUser,
+  type ConsumerRequest,
+  type ConsumerRequestStatus,
   type PaymentRequestStatus,
 } from "@workspace/api-client-react";
 import { ExternalLink, ReceiptText, ShieldCheck } from "lucide-react";
@@ -23,10 +29,14 @@ type ManualPlan = "FOUNDERS_LIFETIME" | "PARTNER" | "TESTER" | "COMPLIMENTARY";
 export function AdminPanel({ account, onAccount }: { account: AccountResponse; onAccount: () => void }) {
   const [search, setSearch] = useState("");
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
+  const [consumerNotes, setConsumerNotes] = useState<Record<string, string>>({});
   const queryClient = useQueryClient();
   const users = useQuery({ queryKey: ["admin-users", search], queryFn: ({ signal }) => getAdminUsers(search, signal) });
   const payments = useQuery({ queryKey: ["admin-payment-requests"], queryFn: ({ signal }) => getAdminPaymentRequests(signal) });
   const audit = useQuery({ queryKey: ["admin-audit"], queryFn: ({ signal }) => getAdminAudit(signal) });
+  const consumerRequests = useQuery({ queryKey: ["admin-consumer-requests"], queryFn: ({ signal }) => getAdminConsumerRequests(signal) });
+  const signalEngine = useQuery({ queryKey: ["admin-signal-engine"], queryFn: ({ signal }) => getAdminSignalEngineHealth(signal), refetchInterval: 30_000 });
+  const readiness = useQuery({ queryKey: ["admin-readiness"], queryFn: ({ signal }) => getAdminReadiness(signal), refetchInterval: 30_000 });
 
   const userMutation = useMutation({
     mutationFn: async ({ user, action }: { user: AdminUser; action: UserAction }) => {
@@ -44,6 +54,10 @@ export function AdminPanel({ account, onAccount }: { account: AccountResponse; o
     mutationFn: ({ userId, plan, reason, expiresAt }: { userId: string; plan: ManualPlan; reason?: string; expiresAt?: string | null }) => grantManualAccess(userId, { plan, reason, expiresAt }),
     onSuccess: () => refreshAdmin(queryClient),
   });
+  const consumerMutation = useMutation({
+    mutationFn: ({ request, status }: { request: ConsumerRequest; status: Exclude<ConsumerRequestStatus, "PENDING"> }) => reviewConsumerRequest(request.id!, status, consumerNotes[request.id!]),
+    onSuccess: () => refreshAdmin(queryClient),
+  });
 
   return <main className="min-h-screen overflow-x-hidden bg-[#070812] text-slate-100"><div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
     <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/8 bg-[#0b0d1b]/85 px-4 py-3.5"><Brand /><div className="flex gap-2"><span className="rounded-lg bg-violet-400/12 px-3 py-2 text-sm font-semibold text-violet-100">Administración</span><button className="min-h-11 rounded-lg px-3 py-2 text-sm font-semibold text-slate-300 hover:bg-white/6" onClick={onAccount} type="button">Cuenta</button></div></header>
@@ -56,6 +70,12 @@ export function AdminPanel({ account, onAccount }: { account: AccountResponse; o
       {payments.data ? <div className="mt-6 grid gap-4 xl:grid-cols-2">{payments.data.requests.map((request) => <PaymentRequestCard key={request.id} notes={reviewNotes[request.id] ?? ""} onNotes={(notes) => setReviewNotes((current) => ({ ...current, [request.id]: notes }))} onReview={(decision) => reviewMutation.mutate({ request, decision })} pending={reviewMutation.isPending && reviewMutation.variables?.request.id === request.id} request={request} />)}</div> : null}
       {reviewMutation.isError ? <ErrorMessage>{readableError(reviewMutation.error)}</ErrorMessage> : null}
     </section>
+
+    <section className="mt-6 rounded-2xl border border-white/8 bg-slate-950/55 p-5 sm:p-6"><h2 className="text-xl font-semibold text-white">Readiness de lanzamiento</h2><p className="mt-1 text-sm text-slate-400">Vista administrativa segura; no contiene credenciales ni indicadores propietarios.</p>{readiness.isPending ? <p className="py-6 text-sm text-slate-400">Comprobando dependencias…</p> : null}{readiness.isError ? <ErrorMessage>No se pudo completar el diagnóstico.</ErrorMessage> : null}{readiness.data ? <><p className={`mt-4 text-sm font-semibold ${readiness.data.releaseReady ? "text-emerald-200" : "text-amber-200"}`}>{readiness.data.releaseReady ? "Listo según controles automáticos" : "Bloqueado para lanzamiento público"}</p><dl className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Data label="Base de datos" value={readiness.data.database.status} /><Data label="Auth" value={readiness.data.auth.status} /><Data label="Email" value={readiness.data.email.configured ? "CONFIGURADO" : "NO CONFIGURADO"} /><Data label="Telegram" value={readiness.data.telegram.configured ? "CONFIGURADO" : "NO CONFIGURADO"} /><Data label="Scheduler" value={readiness.data.signalScheduler.status} /><Data label="Market provider" value={readiness.data.marketProvider.status} /><Data label="Configuración legal" value={readiness.data.legal.status} /><Data label="Topología" value={`${readiness.data.topology.environment} · ${readiness.data.topology.status}`} /></dl>{readiness.data.legal.missing.length ? <p className="mt-4 break-words text-xs leading-5 text-amber-100">Faltan: {readiness.data.legal.missing.join(", ")}.</p> : null}</> : null}</section>
+
+    <section className="mt-6 rounded-2xl border border-white/8 bg-slate-950/55 p-5 sm:p-6"><h2 className="text-xl font-semibold text-white">Salud del Signal Engine</h2><p className="mt-1 text-sm text-slate-400">Diagnóstico operativo sin indicadores internos ni secretos.</p>{signalEngine.isPending ? <p className="py-6 text-sm text-slate-400">Cargando estado…</p> : null}{signalEngine.isError ? <ErrorMessage>No se pudo consultar el motor.</ErrorMessage> : null}{signalEngine.data ? <><p className={`mt-4 text-sm font-semibold ${signalEngine.data.scheduler.running ? "text-emerald-200" : "text-rose-200"}`}>Scheduler {signalEngine.data.scheduler.running ? "activo" : "detenido"} · {signalEngine.data.provider} · cada {signalEngine.data.scheduler.intervalMs / 1_000}s · próxima ejecución {signalEngine.data.scheduler.nextRunAt ? formatDate(signalEngine.data.scheduler.nextRunAt) : "no programada"}</p><div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{signalEngine.data.timeframes.map((item) => <article className="rounded-xl border border-white/8 bg-black/15 p-4" key={item.timeframe}><p className="font-semibold text-white">BTC · {item.timeframe}</p><dl className="mt-3 space-y-2"><Data label="Proveedor" value={item.provider} /><Data label="Último scan" value={item.lastScanAt ? formatDate(item.lastScanAt) : "Sin ejecutar"} /><Data label="Último fetch" value={item.lastFetchAt ? formatDate(item.lastFetchAt) : "Sin datos"} /><Data label="Última vela" value={item.lastCandleAt ? formatDate(item.lastCandleAt) : "Sin datos"} /><Data label="Resultado" value={item.lastOutcome ?? "Sin evaluar"} /><Data label="Última señal creada" value={item.lastSignalCreatedAt ? formatDate(item.lastSignalCreatedAt) : "Ninguna"} />{item.lastError ? <Data label="Último error" value={item.lastError} /> : null}</dl></article>)}</div></> : null}</section>
+
+    <section className="mt-6 rounded-2xl border border-white/8 bg-slate-950/55 p-5 sm:p-6"><h2 className="text-xl font-semibold text-white">Arrepentimientos y bajas</h2><p className="mt-1 text-sm text-slate-400">Revisión humana; ninguna solicitud ejecuta automáticamente una devolución cripto.</p>{consumerRequests.isPending ? <p className="py-6 text-sm text-slate-400">Cargando solicitudes…</p> : null}{consumerRequests.isError ? <ErrorMessage>No se pudieron cargar las solicitudes.</ErrorMessage> : null}{consumerRequests.data?.requests.length === 0 ? <p className="mt-5 text-sm text-slate-400">No hay solicitudes registradas.</p> : null}{consumerRequests.data ? <div className="mt-5 grid gap-4 xl:grid-cols-2">{consumerRequests.data.requests.map((request) => <article className="rounded-xl border border-white/8 bg-black/15 p-4" key={request.id}><div className="flex flex-wrap justify-between gap-2"><div><p className="font-semibold text-white">{request.type === "WITHDRAWAL" ? "Arrepentimiento" : "Baja de servicio"}</p><p className="mt-1 break-all text-xs text-slate-400">{request.code} · {request.email}</p></div><span className="text-xs font-semibold text-violet-200">{request.status}</span></div><dl className="mt-4 grid gap-2 sm:grid-cols-2"><Data label="Compra / TXID" value={request.paymentReference ?? "No informado"} /><Data label="Fecha" value={formatDate(request.createdAt)} /></dl>{request.description ? <p className="mt-3 text-sm leading-6 text-slate-300">{request.description}</p> : null}{request.status !== "COMPLETED" ? <><textarea aria-label={`Notas para ${request.code}`} className="mt-4 min-h-20 w-full rounded-xl border border-white/10 bg-[#070912] p-3 text-sm text-white" maxLength={2000} onChange={(event) => setConsumerNotes((current) => ({ ...current, [request.id!]: event.target.value }))} placeholder="Notas internas" value={consumerNotes[request.id!] ?? ""} /><div className="mt-3 flex flex-wrap gap-2">{consumerActions(request.status).map(([status, label]) => <button className="min-h-11 rounded-xl border border-violet-300/20 px-3 text-xs font-semibold text-violet-100 disabled:opacity-50" disabled={consumerMutation.isPending} key={status} onClick={() => consumerMutation.mutate({ request, status })} type="button">{label}</button>)}</div></> : null}</article>)}</div> : null}{consumerMutation.isError ? <ErrorMessage>{readableError(consumerMutation.error)}</ErrorMessage> : null}</section>
 
     <section className="mt-6 rounded-2xl border border-white/8 bg-slate-950/55 p-5 sm:p-6"><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="text-xl font-semibold text-white">Usuarios y accesos manuales</h2><p className="mt-1 text-sm text-slate-400">Partner, Tester y Cortesía siguen siendo cuentas con rol de usuario.</p></div><input aria-label="Buscar usuarios" className="min-h-11 w-full rounded-xl border border-white/10 bg-[#090c18] px-3 text-sm text-white outline-none focus:border-violet-300/70 sm:w-72" onChange={(event) => setSearch(event.target.value)} placeholder="Buscar email o nombre de usuario" value={search} /></div>
       {users.isPending ? <p className="py-10 text-sm text-slate-400">Cargando usuarios…</p> : null}{users.isError ? <ErrorMessage>No se pudo cargar la lista de usuarios.</ErrorMessage> : null}
@@ -99,12 +119,13 @@ function ErrorMessage({ children }: { children: React.ReactNode }) { return <p c
 function Data({ label, value }: { label: string; value: string }) { return <div className="min-w-0"><dt className="text-[10px] font-semibold uppercase tracking-[0.13em] text-slate-500">{label}</dt><dd className="mt-1 break-all text-xs font-medium leading-5 text-slate-300">{value}</dd></div>; }
 
 const controlClass = "mt-2 min-h-11 w-full min-w-0 rounded-xl border border-white/10 bg-[#070912] px-3 text-sm normal-case tracking-normal text-white outline-none disabled:text-slate-600";
-function refreshAdmin(queryClient: ReturnType<typeof useQueryClient>) { return Promise.all([queryClient.invalidateQueries({ queryKey: ["admin-users"] }), queryClient.invalidateQueries({ queryKey: ["admin-audit"] }), queryClient.invalidateQueries({ queryKey: ["admin-payment-requests"] })]); }
+function refreshAdmin(queryClient: ReturnType<typeof useQueryClient>) { return Promise.all([queryClient.invalidateQueries({ queryKey: ["admin-users"] }), queryClient.invalidateQueries({ queryKey: ["admin-audit"] }), queryClient.invalidateQueries({ queryKey: ["admin-payment-requests"] }), queryClient.invalidateQueries({ queryKey: ["admin-consumer-requests"] }), queryClient.invalidateQueries({ queryKey: ["admin-signal-engine"] }), queryClient.invalidateQueries({ queryKey: ["admin-readiness"] })]); }
+function consumerActions(status: ConsumerRequestStatus): Array<[Exclude<ConsumerRequestStatus, "PENDING">, string]> { if (status === "PENDING") return [["REVIEWING", "Tomar revisión"], ["APPROVED", "Aprobar"], ["REJECTED", "Rechazar"]]; if (status === "REVIEWING") return [["APPROVED", "Aprobar"], ["REJECTED", "Rechazar"]]; if (status === "APPROVED") return [["COMPLETED", "Marcar completada"], ["REVIEWING", "Reabrir"]]; if (status === "REJECTED") return [["REVIEWING", "Reabrir"]]; return []; }
 function readableError(error: unknown): string { if (!(error instanceof Error)) return "No se pudo completar la acción."; return error.message.replace(/^HTTP \d+ [^:]+:\s*/, ""); }
 function formatDate(value: string): string { const date = new Date(value); return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(date); }
 function formatAmount(value: string): string { return Number(value).toLocaleString("es-AR", { maximumFractionDigits: 8 }); }
 function formatBytes(value: number): string { return value < 1024 * 1024 ? `${Math.ceil(value / 1024)} KB` : `${(value / 1024 / 1024).toFixed(1)} MB`; }
-function methodLabel(method: AdminPaymentRequest["method"]): string { return method === "USDT_TRC20" ? "USDT TRC20" : "Mercado Pago / transferencia"; }
+function methodLabel(method: AdminPaymentRequest["method"]): string { return method === "USDT_TRC20" ? "USDT TRC20" : "Transferencia Argentina"; }
 function statusLabel(status: PaymentRequestStatus): string { return status === "PENDING" ? "Pendiente" : status === "APPROVED" ? "Aprobada" : status === "REJECTED" ? "Rechazada" : "Más información"; }
 function planLabel(plan: string | null): string { return plan === "FOUNDERS_LIFETIME" ? "Founders" : plan === "PARTNER" ? "Partner" : plan === "TESTER" ? "Tester" : plan === "COMPLIMENTARY" ? "Cortesía" : "Activo"; }
 function auditLabel(action: string): string { const labels: Record<string, string> = { USER_REGISTERED: "Usuario registrado", USER_LOGIN: "Inicio de sesión", USER_LOGOUT: "Cierre de sesión", USER_BLOCKED: "Usuario bloqueado", USER_UNBLOCKED: "Usuario desbloqueado", ROLE_CHANGED: "Rol modificado", PAYMENT_REQUESTED: "Solicitud de pago creada", PAYMENT_APPROVED: "Pago aprobado", PAYMENT_REJECTED: "Pago rechazado", PAYMENT_NEEDS_REVIEW: "Se solicitó más información", ACCESS_GRANTED: "Acceso concedido", ACCESS_REVOKED: "Acceso revocado", ACCESS_RESTORED: "Acceso reactivado" }; return labels[action] ?? "Actividad administrativa"; }

@@ -1,6 +1,6 @@
 # Signal Engine V1
 
-`NEXO_CONFLUENCE_V1` evaluates real BTCUSDT candles and never emits a signal merely because the dashboard was opened.
+`TRENORO_CONFLUENCE_V1` evaluates real BTCUSDT candles and never emits a signal merely because the dashboard was opened.
 
 Commercial timeframes are 5m, 15m, 1h, and 4h. The API refreshes all four immediately on startup and every 60 seconds afterward, so opening the dashboard is not required to create, resolve, or expire a signal. Concurrent instances and restarts remain safe because database uniqueness and configuration fingerprints are authoritative.
 

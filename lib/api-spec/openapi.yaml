@@ -31,15 +31,15 @@ paths:
       operationId: getMarketSignal
       tags: [market]
       summary: Get a market signal
-      description: Returns an indicative, non-executable market analysis. BTCUSDT uses Binance; XAUUSD returns current Twelve Data market data because no XAU/USD signal strategy is implemented.
+      description: Returns an indicative, non-executable BTCUSDT market analysis using real Binance data.
       parameters:
         - name: symbol
           in: query
           required: false
-          description: Market symbol, for example BTCUSDT or XAUUSD
+          description: Commercial market symbol. Only BTCUSDT is enabled.
           schema:
             type: string
-            pattern: "^[A-Za-z0-9]{2,20}$"
+            enum: [BTCUSDT]
             default: BTCUSDT
       responses:
         "200":
@@ -47,9 +47,7 @@ paths:
           content:
             application/json:
                schema:
-                 oneOf:
-                   - $ref: "#/components/schemas/MarketSignal"
-                   - $ref: "#/components/schemas/GoldMarketData"
+                 $ref: "#/components/schemas/MarketSignal"
         "400":
           description: Invalid symbol
         "502":
@@ -59,15 +57,15 @@ paths:
       operationId: getMarketData
       tags: [market]
       summary: Get current market data
-      description: Returns real current market data. BTC symbols use Binance; XAUUSD uses Twelve Data.
+      description: Returns real current BTCUSDT market data from Binance.
       parameters:
         - name: symbol
           in: query
           required: false
-          description: Market symbol, for example BTCUSDT or XAUUSD
+          description: Commercial market symbol. Only BTCUSDT is enabled.
           schema:
             type: string
-            pattern: "^[A-Za-z0-9]{2,20}$"
+            enum: [BTCUSDT]
             default: BTCUSDT
       responses:
         "200":
@@ -75,9 +73,7 @@ paths:
           content:
             application/json:
               schema:
-                oneOf:
-                  - $ref: "#/components/schemas/CryptoMarketData"
-                  - $ref: "#/components/schemas/GoldMarketData"
+                $ref: "#/components/schemas/CryptoMarketData"
         "400":
           description: Invalid market symbol
         "502":
@@ -91,21 +87,21 @@ paths:
       operationId: getHistoricalCandles
       tags: [market]
       summary: Get historical real candles
-      description: Returns normalized real OHLCV candles. BTCUSDT uses Binance and XAUUSD uses Twelve Data when TWELVEDATA_API_KEY is configured.
+      description: Returns normalized real BTCUSDT OHLCV candles from Binance for commercial timeframes.
       parameters:
         - name: symbol
           in: query
           required: false
           schema:
             type: string
-            enum: [BTCUSDT, XAUUSD]
+            enum: [BTCUSDT]
             default: BTCUSDT
         - name: timeframe
           in: query
           required: false
           schema:
             type: string
-            enum: [1m, 5m, 15m, 1h, 4h]
+            enum: [5m, 15m, 1h, 4h]
             default: 15m
         - name: limit
           in: query
@@ -121,9 +117,7 @@ paths:
           content:
             application/json:
               schema:
-                oneOf:
-                  - $ref: "#/components/schemas/HistoricalCandles"
-                  - $ref: "#/components/schemas/UnavailableHistoricalCandles"
+                $ref: "#/components/schemas/HistoricalCandles"
         "400":
           description: Invalid historical query
         "502":
@@ -140,14 +134,14 @@ paths:
           required: false
           schema:
             type: string
-            enum: [BTCUSDT, XAUUSD]
+            enum: [BTCUSDT]
             default: BTCUSDT
         - name: timeframe
           in: query
           required: false
           schema:
             type: string
-            enum: [1m, 5m, 15m, 1h, 4h]
+            enum: [5m, 15m, 1h, 4h]
             default: 15m
       responses:
         "200":
@@ -248,37 +242,6 @@ components:
         - updatedAt
         - provider
         - assetClass
-    GoldMarketData:
-      type: object
-      properties:
-        symbol:
-          type: string
-          enum: [XAUUSD]
-        price:
-          type: number
-        currency:
-          type: string
-          enum: [USD]
-        unit:
-          type: string
-          enum: [troy_ounce]
-        updatedAt:
-          type: string
-          format: date-time
-        provider:
-          type: string
-          enum: [twelvedata]
-        assetClass:
-          type: string
-          enum: [gold]
-      required:
-        - symbol
-        - price
-        - currency
-        - unit
-        - updatedAt
-        - provider
-        - assetClass
     HistoricalCandle:
       type: object
       properties:
@@ -305,12 +268,12 @@ components:
           enum: [OK]
         symbol:
           type: string
-          enum: [BTCUSDT, XAUUSD]
+          enum: [BTCUSDT]
         timeframe:
           type: string
         provider:
           type: string
-          enum: [binance, twelvedata]
+          enum: [binance]
         candles:
           type: array
           items:
@@ -319,33 +282,9 @@ components:
           type: array
           items:
             type: string
+            enum: [5m, 15m, 1h, 4h]
         message:
           type: "null"
-      required: [status, symbol, timeframe, provider, candles, availableTimeframes, message]
-    UnavailableHistoricalCandles:
-      type: object
-      properties:
-        status:
-          type: string
-          enum: [UNAVAILABLE]
-        symbol:
-          type: string
-          enum: [XAUUSD]
-        timeframe:
-          type: string
-        provider:
-          type: string
-          enum: [twelvedata]
-        candles:
-          type: array
-          maxItems: 0
-          items: {}
-        availableTimeframes:
-          type: array
-          maxItems: 0
-          items: {}
-        message:
-          type: string
       required: [status, symbol, timeframe, provider, candles, availableTimeframes, message]
     TechnicalIndicatorsResponse:
       type: object

@@ -11,5 +11,4 @@ export type GetHistoricalCandlesSymbol = typeof GetHistoricalCandlesSymbol[keyof
 
 export const GetHistoricalCandlesSymbol = {
   BTCUSDT: 'BTCUSDT',
-  XAUUSD: 'XAUUSD',
 } as const;

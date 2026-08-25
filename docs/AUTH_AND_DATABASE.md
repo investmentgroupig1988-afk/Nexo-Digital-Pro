@@ -62,7 +62,7 @@ Para staging y producción, preferir frontend y API en subdominios del mismo dom
 La suite normal no usa PostgreSQL. Para activar las pruebas de integración reales se requieren ambas variables y una base aislada cuyo nombre termine en `_test`; la prueba rechaza cualquier otro nombre antes de migrar:
 
 ```powershell
-$env:TEST_DATABASE_URL = "postgres://<usuario>:<password>@<host>:5432/nexo_digital_pro_test"
+$env:TEST_DATABASE_URL = "postgres://<usuario>:<password>@<host>:5432/trenoro_test"
 $env:RUN_DB_INTEGRATION_TESTS = "true"
 corepack pnpm run test
 ```

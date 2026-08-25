@@ -18,26 +18,24 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * Returns an indicative, non-executable market analysis. BTCUSDT uses Binance; XAUUSD returns current Twelve Data market data because no XAU/USD signal strategy is implemented.
+ * Returns an indicative, non-executable BTCUSDT market analysis using real Binance data.
  * @summary Get a market signal
  */
 export const getMarketSignalQuerySymbolDefault = `BTCUSDT`;
-export const getMarketSignalQuerySymbolRegExp = new RegExp('^[A-Za-z0-9]{2,20}$');
-
 
 export const GetMarketSignalQueryParams = zod.object({
-  "symbol": zod.coerce.string().regex(getMarketSignalQuerySymbolRegExp).default(getMarketSignalQuerySymbolDefault).describe('Market symbol, for example BTCUSDT or XAUUSD')
+  "symbol": zod.enum(['BTCUSDT']).default(getMarketSignalQuerySymbolDefault).describe('Commercial market symbol. Only BTCUSDT is enabled.')
 })
 
-export const getMarketSignalResponseOneConfidenceMin = 0;
-export const getMarketSignalResponseOneConfidenceMax = 100;
+export const getMarketSignalResponseConfidenceMin = 0;
+export const getMarketSignalResponseConfidenceMax = 100;
 
 
 
-export const GetMarketSignalResponse = zod.union([zod.object({
+export const GetMarketSignalResponse = zod.object({
   "symbol": zod.string(),
   "signal": zod.enum(['BUY', 'SELL', 'HOLD']),
-  "confidence": zod.number().min(getMarketSignalResponseOneConfidenceMin).max(getMarketSignalResponseOneConfidenceMax),
+  "confidence": zod.number().min(getMarketSignalResponseConfidenceMin).max(getMarketSignalResponseConfidenceMax),
   "price": zod.number(),
   "analysis": zod.object({
   "currentPrice": zod.number(),
@@ -49,30 +47,20 @@ export const GetMarketSignalResponse = zod.union([zod.object({
   "interval": zod.string()
 }),
   "updatedAt": zod.coerce.date()
-}),zod.object({
-  "symbol": zod.enum(['XAUUSD']),
-  "price": zod.number(),
-  "currency": zod.enum(['USD']),
-  "unit": zod.enum(['troy_ounce']),
-  "updatedAt": zod.coerce.date(),
-  "provider": zod.enum(['twelvedata']),
-  "assetClass": zod.enum(['gold'])
-})])
+})
 
 
 /**
- * Returns real current market data. BTC symbols use Binance; XAUUSD uses Twelve Data.
+ * Returns real current BTCUSDT market data from Binance.
  * @summary Get current market data
  */
 export const getMarketDataQuerySymbolDefault = `BTCUSDT`;
-export const getMarketDataQuerySymbolRegExp = new RegExp('^[A-Za-z0-9]{2,20}$');
-
 
 export const GetMarketDataQueryParams = zod.object({
-  "symbol": zod.coerce.string().regex(getMarketDataQuerySymbolRegExp).default(getMarketDataQuerySymbolDefault).describe('Market symbol, for example BTCUSDT or XAUUSD')
+  "symbol": zod.enum(['BTCUSDT']).default(getMarketDataQuerySymbolDefault).describe('Commercial market symbol. Only BTCUSDT is enabled.')
 })
 
-export const GetMarketDataResponse = zod.union([zod.object({
+export const GetMarketDataResponse = zod.object({
   "symbol": zod.string(),
   "price": zod.number(),
   "currency": zod.enum(['USDT']),
@@ -80,19 +68,11 @@ export const GetMarketDataResponse = zod.union([zod.object({
   "updatedAt": zod.coerce.date(),
   "provider": zod.enum(['binance']),
   "assetClass": zod.enum(['crypto'])
-}),zod.object({
-  "symbol": zod.enum(['XAUUSD']),
-  "price": zod.number(),
-  "currency": zod.enum(['USD']),
-  "unit": zod.enum(['troy_ounce']),
-  "updatedAt": zod.coerce.date(),
-  "provider": zod.enum(['twelvedata']),
-  "assetClass": zod.enum(['gold'])
-})])
+})
 
 
 /**
- * Returns normalized real OHLCV candles. BTCUSDT uses Binance and XAUUSD uses Twelve Data when TWELVEDATA_API_KEY is configured.
+ * Returns normalized real BTCUSDT OHLCV candles from Binance for commercial timeframes.
  * @summary Get historical real candles
  */
 export const getHistoricalCandlesQuerySymbolDefault = `BTCUSDT`;
@@ -103,22 +83,16 @@ export const getHistoricalCandlesQueryLimitMax = 1000;
 
 
 export const GetHistoricalCandlesQueryParams = zod.object({
-  "symbol": zod.enum(['BTCUSDT', 'XAUUSD']).default(getHistoricalCandlesQuerySymbolDefault),
-  "timeframe": zod.enum(['1m', '5m', '15m', '1h', '4h']).default(getHistoricalCandlesQueryTimeframeDefault),
+  "symbol": zod.enum(['BTCUSDT']).default(getHistoricalCandlesQuerySymbolDefault),
+  "timeframe": zod.enum(['5m', '15m', '1h', '4h']).default(getHistoricalCandlesQueryTimeframeDefault),
   "limit": zod.coerce.number().int().min(1).max(getHistoricalCandlesQueryLimitMax).default(getHistoricalCandlesQueryLimitDefault)
 })
 
-export const getHistoricalCandlesResponseTwoCandlesMax = 0;
-
-export const getHistoricalCandlesResponseTwoAvailableTimeframesMax = 0;
-
-
-
-export const GetHistoricalCandlesResponse = zod.union([zod.object({
+export const GetHistoricalCandlesResponse = zod.object({
   "status": zod.enum(['OK']),
-  "symbol": zod.enum(['BTCUSDT', 'XAUUSD']),
+  "symbol": zod.enum(['BTCUSDT']),
   "timeframe": zod.string(),
-  "provider": zod.enum(['binance', 'twelvedata']),
+  "provider": zod.enum(['binance']),
   "candles": zod.array(zod.object({
   "timestamp": zod.coerce.date(),
   "open": zod.number(),
@@ -127,17 +101,9 @@ export const GetHistoricalCandlesResponse = zod.union([zod.object({
   "close": zod.number(),
   "volume": zod.number().nullable()
 })),
-  "availableTimeframes": zod.array(zod.string()),
+  "availableTimeframes": zod.array(zod.enum(['5m', '15m', '1h', '4h'])),
   "message": zod.null()
-}),zod.object({
-  "status": zod.enum(['UNAVAILABLE']),
-  "symbol": zod.enum(['XAUUSD']),
-  "timeframe": zod.string(),
-  "provider": zod.enum(['twelvedata']),
-  "candles": zod.array(zod.unknown()).max(getHistoricalCandlesResponseTwoCandlesMax),
-  "availableTimeframes": zod.array(zod.unknown()).max(getHistoricalCandlesResponseTwoAvailableTimeframesMax),
-  "message": zod.string()
-})])
+})
 
 
 /**
@@ -148,8 +114,8 @@ export const getTechnicalIndicatorsQuerySymbolDefault = `BTCUSDT`;
 export const getTechnicalIndicatorsQueryTimeframeDefault = `15m`;
 
 export const GetTechnicalIndicatorsQueryParams = zod.object({
-  "symbol": zod.enum(['BTCUSDT', 'XAUUSD']).default(getTechnicalIndicatorsQuerySymbolDefault),
-  "timeframe": zod.enum(['1m', '5m', '15m', '1h', '4h']).default(getTechnicalIndicatorsQueryTimeframeDefault)
+  "symbol": zod.enum(['BTCUSDT']).default(getTechnicalIndicatorsQuerySymbolDefault),
+  "timeframe": zod.enum(['5m', '15m', '1h', '4h']).default(getTechnicalIndicatorsQueryTimeframeDefault)
 })
 
 export const GetTechnicalIndicatorsResponse = zod.object({

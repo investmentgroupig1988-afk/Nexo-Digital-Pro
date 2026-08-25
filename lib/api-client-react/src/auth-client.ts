@@ -34,6 +34,46 @@ export type AuthenticationInput = {
 export type RegistrationInput = AuthenticationInput & {
   username: string;
   name?: string;
+  acceptTerms: true;
+  adultConfirmed: true;
+};
+
+export type ConsumerRequestType = "WITHDRAWAL" | "SERVICE_CANCELLATION";
+export type ConsumerRequestStatus = "PENDING" | "REVIEWING" | "APPROVED" | "REJECTED" | "COMPLETED";
+export type ConsumerRequest = {
+  id?: string;
+  code: string;
+  type: ConsumerRequestType;
+  status: ConsumerRequestStatus;
+  email?: string;
+  paymentReference?: string | null;
+  description?: string | null;
+  adminNotes?: string | null;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+export type SignalEngineHealth = {
+  scheduler: { running: boolean; cycleRunning: boolean; startedAt: string | null; lastCycleStartedAt: string | null; lastCycleCompletedAt: string | null; nextRunAt: string | null; intervalMs: number };
+  symbol: "BTCUSDT";
+  provider: "binance";
+  notifications: { lastDispatchAt: string | null; lastErrorAt: string | null };
+  timeframes: Array<{ timeframe: "5m" | "15m" | "1h" | "4h"; provider: "binance"; symbol: "BTCUSDT"; lastScanAt: string | null; lastFetchAt: string | null; lastCandleAt: string | null; lastOutcome: "LONG" | "SHORT" | "NO_SIGNAL" | null; lastSignalCreatedAt: string | null; lastErrorAt: string | null; lastError: string | null }>;
+};
+
+export type AdminReadiness = {
+  checkedAt: string;
+  releaseReady: boolean;
+  blockers: string[];
+  database: { status: "OK" | "ERROR" };
+  auth: { status: "OK" | "INCOMPLETE" };
+  email: { configured: boolean };
+  telegram: { configured: boolean; lastDispatchAt: string | null; lastErrorAt: string | null };
+  signalScheduler: SignalEngineHealth["scheduler"] & { status: "OK" | "ERROR" | "STARTING" | "STALE" };
+  marketProvider: { status: "OK" | "ERROR" | "STARTING"; provider: "binance"; symbol: "BTCUSDT"; lastFetchAt: string | null; lastCandleAt: string | null; lastScanAt: string | null };
+  legal: { status: "OK" | "INCOMPLETE"; missing: string[] };
+  featureGates: { argentinaPayments: "ENABLED" | "DISABLED"; xauusd: "DISABLED"; oneMinute: "DISABLED" };
+  topology: { environment: "STAGING" | "PRODUCTION" | "LOCAL_OR_CUSTOM"; status: "OK" | "ERROR" | "INCOMPLETE"; isolated: boolean };
 };
 
 export type AdminUser = Pick<AccountUser, "id" | "email" | "username" | "role" | "status" | "createdAt" | "lastLoginAt"> & {
@@ -134,6 +174,42 @@ export function logout(signal?: AbortSignal): Promise<unknown> {
   return customFetch("/api/auth/logout", { ...jsonRequest, method: "POST", signal });
 }
 
+export function requestPasswordReset(email: string): Promise<{ message: string }> {
+  return customFetch("/api/auth/request-password-reset", { ...jsonRequest, method: "POST", body: JSON.stringify({ email }) });
+}
+
+export function resetPassword(token: string, newPassword: string): Promise<unknown> {
+  return customFetch("/api/auth/reset-password", { ...jsonRequest, method: "POST", body: JSON.stringify({ token, newPassword }) });
+}
+
+export function sendVerificationEmail(email: string): Promise<{ message: string }> {
+  return customFetch("/api/auth/send-verification", { ...jsonRequest, method: "POST", body: JSON.stringify({ email }) });
+}
+
+export function verifyEmail(token: string): Promise<unknown> {
+  return customFetch(`/api/auth/verify-email?token=${encodeURIComponent(token)}`, { responseType: "json" });
+}
+
+export function createConsumerRequest(input: { type: ConsumerRequestType; email: string; paymentReference?: string; description?: string }): Promise<{ request: ConsumerRequest; message: string }> {
+  return customFetch("/api/consumer-requests", { ...jsonRequest, method: "POST", body: JSON.stringify(input) });
+}
+
+export function getAdminConsumerRequests(signal?: AbortSignal): Promise<{ requests: ConsumerRequest[] }> {
+  return customFetch("/api/admin/consumer-requests", { responseType: "json", signal });
+}
+
+export function reviewConsumerRequest(id: string, status: Exclude<ConsumerRequestStatus, "PENDING">, notes?: string): Promise<{ request: ConsumerRequest }> {
+  return customFetch(`/api/admin/consumer-requests/${encodeURIComponent(id)}/review`, { ...jsonRequest, method: "POST", body: JSON.stringify({ status, notes }) });
+}
+
+export function getAdminSignalEngineHealth(signal?: AbortSignal): Promise<SignalEngineHealth> {
+  return customFetch("/api/admin/signal-engine", { responseType: "json", signal });
+}
+
+export function getAdminReadiness(signal?: AbortSignal): Promise<AdminReadiness> {
+  return customFetch("/api/admin/readiness", { responseType: "json", signal });
+}
+
 export function getAccount(signal?: AbortSignal): Promise<AccountResponse> {
   return customFetch<AccountResponse>("/api/me", { responseType: "json", signal });
 }
@@ -146,7 +222,7 @@ export function getMyPaymentRequests(signal?: AbortSignal): Promise<{ requests: 
   return customFetch<{ requests: PaymentRequest[] }>("/api/payment-requests/me", { responseType: "json", signal });
 }
 
-export function createPaymentRequest(input: CreatePaymentRequestInput): Promise<{ request: PaymentRequest; whatsappUrl: string }> {
+export function createPaymentRequest(input: CreatePaymentRequestInput): Promise<{ request: PaymentRequest; whatsappUrl: string | null }> {
   return customFetch("/api/payment-requests", { ...jsonRequest, method: "POST", body: JSON.stringify(input) });
 }
 

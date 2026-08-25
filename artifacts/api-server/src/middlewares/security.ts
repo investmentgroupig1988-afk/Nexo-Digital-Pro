@@ -106,7 +106,7 @@ export function authRateLimit(
 /**
  * State-changing cookie requests must originate from this API or an explicitly
  * configured browser origin. Better Auth performs its own origin validation;
- * this also protects Nexo's custom account/admin endpoints.
+ * this also protects TRENORO's custom account/admin endpoints.
  */
 export function trustedMutationOrigin(
   req: Request,

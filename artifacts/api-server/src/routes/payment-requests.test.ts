@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { FOUNDERS_OFFER } from "@workspace/product";
 import { createPaymentRequestSchema, ensurePaymentMethodAvailable } from "./payment-requests";
 
 const baseRequest = {
@@ -31,4 +32,13 @@ test("the API rejects Argentina transfers until the owner explicitly enables the
   );
   assert.doesNotThrow(() => ensurePaymentMethodAvailable("USDT_TRC20", false));
   assert.doesNotThrow(() => ensurePaymentMethodAvailable("MERCADO_PAGO_TRANSFER", true));
+});
+
+test("the official Argentina offer is centralized and arithmetically consistent", () => {
+  assert.equal(FOUNDERS_OFFER.argentina.alias, "TRENORO");
+  assert.equal(FOUNDERS_OFFER.argentina.alias.toLowerCase(), "trenoro");
+  assert.equal(FOUNDERS_OFFER.argentina.cvu, "0000003100075319042852");
+  assert.equal(FOUNDERS_OFFER.argentina.holder, "EMANUEL SEBASTIAN");
+  assert.equal(FOUNDERS_OFFER.argentina.price, 40_500);
+  assert.equal(FOUNDERS_OFFER.argentina.referenceUsd * FOUNDERS_OFFER.argentina.referenceRateArs, FOUNDERS_OFFER.argentina.price);
 });

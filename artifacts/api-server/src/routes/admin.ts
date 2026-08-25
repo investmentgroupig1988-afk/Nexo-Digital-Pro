@@ -7,6 +7,8 @@ import { AccessStateError, getEffectiveAccess, grantAccess, listAccessHistory, r
 import { writeAuditLog } from "../services/audit";
 import { listPaymentRequests, PaymentRequestError, reviewPaymentRequest } from "../services/payment-requests";
 import { serializeAccess } from "./account";
+import { getSignalEngineHealth } from "../services/signal-refresh";
+import { getAdminReadiness } from "../services/readiness";
 
 const router: IRouter = Router();
 const userIdSchema = z.string().trim().min(1).max(128);
@@ -228,6 +230,18 @@ router.get("/admin/audit", async (req, res, next) => {
       actor: entry.actorUserId ? identityById.get(entry.actorUserId) ?? null : null,
       target: entry.targetUserId ? identityById.get(entry.targetUserId) ?? null : null,
     })) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/admin/signal-engine", (_req, res) => {
+  res.json(getSignalEngineHealth());
+});
+
+router.get("/admin/readiness", async (_req, res, next) => {
+  try {
+    res.json(await getAdminReadiness());
   } catch (error) {
     next(error);
   }

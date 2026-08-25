@@ -1,4 +1,4 @@
-import { useState, type ComponentType, type ReactNode } from "react";
+import { type ComponentType, type ReactNode } from "react";
 import {
   Activity,
   ArrowRight,
@@ -11,7 +11,6 @@ import {
   LockKeyhole,
   ShieldAlert,
   Sparkles,
-  X,
 } from "lucide-react";
 import { PRODUCT_DISPLAY_NAME, PRODUCT_DISPLAY_NAME_UPPER, PRODUCT_MARK } from "@/config/product";
 
@@ -21,7 +20,6 @@ type PublicLandingProps = {
 };
 
 type Icon = ComponentType<{ className?: string; strokeWidth?: number }>;
-type LegalDocument = "terms" | "privacy" | "refunds" | "contact";
 
 const capabilities: Array<{ title: string; description: string; icon: Icon }> = [
   {
@@ -52,38 +50,17 @@ const steps = [
 const faqs = [
   ["¿Qué incluye mi acceso?", "El acceso Founders incluye el dashboard de señales de BTC, contexto multitemporal, métricas e historial real cuando estén disponibles."],
   ["¿El pago es realmente único?", "Sí. El acceso Founders se ofrece por USD 27 en un único pago, sin suscripción mensual para miembros Founders."],
-  ["¿Nexo Digital Pro ejecuta operaciones?", "No. Nexo Digital Pro organiza información técnica; cada usuario decide si opera y ejecuta sus propias decisiones fuera de la plataforma."],
+  [`¿${PRODUCT_DISPLAY_NAME} ejecuta operaciones?`, `No. ${PRODUCT_DISPLAY_NAME} organiza información técnica; cada usuario decide si opera y ejecuta sus propias decisiones fuera de la plataforma.`],
   ["¿Qué mercados están disponibles?", "BTC está disponible. XAUUSD permanece fuera de la oferta comercial y se mostrará como disponible únicamente cuando esté habilitado para lanzamiento."],
   ["¿Cómo se activa mi cuenta después del pago?", "Desde tu cuenta creás una solicitud y cargás la referencia, TXID o comprobante. El equipo revisa el registro y, al aprobarlo, el sistema habilita el acceso Founders."],
-  ["¿Puedo usar Nexo Digital Pro desde el celular?", "Sí. La experiencia está diseñada primero para celular y se adapta también a tablet y escritorio."],
+  [`¿Puedo usar ${PRODUCT_DISPLAY_NAME} desde el celular?`, "Sí. La experiencia está diseñada primero para celular y se adapta también a tablet y escritorio."],
   ["¿Qué ocurre si tengo un problema con mi acceso?", "Podés contactar al canal oficial de soporte y verificación por WhatsApp. Nunca compartas contraseñas, tokens, cookies ni claves privadas."],
   ["¿Es obligatorio usar WhatsApp?", "No. La solicitud queda guardada en la plataforma; WhatsApp es un canal opcional de soporte después de enviarla."],
   ["¿Puedo perder el acceso?", "El acceso puede bloquearse o revocarse ante una incidencia de seguridad, fraude o incumplimiento que requiera revisión. Toda decisión queda registrada por el sistema."],
   ["¿Los análisis garantizan resultados?", "No. Todo análisis tiene riesgo y puede fallar. Los resultados históricos tampoco garantizan resultados futuros."],
 ] as const;
 
-const legalDocuments: Record<LegalDocument, { title: string; body: string }> = {
-  terms: {
-    title: "Términos y Condiciones",
-    body: "El documento contractual completo todavía no fue incorporado. Debe publicarse y revisarse antes de habilitar el cobro.",
-  },
-  privacy: {
-    title: "Política de Privacidad",
-    body: "La política completa sobre tratamiento y protección de datos personales todavía debe publicarse antes del lanzamiento comercial.",
-  },
-  refunds: {
-    title: "Política de Reembolsos",
-    body: "La política comercial de reembolsos requiere una definición expresa antes de habilitar pagos. No se presentan aquí condiciones que todavía no fueron aprobadas.",
-  },
-  contact: {
-    title: "Contacto",
-    body: "Canal oficial de soporte y verificación por WhatsApp: +54 9 11 5155-0781. Nunca envíes contraseñas, tokens, cookies ni claves privadas.",
-  },
-};
-
 export function PublicLanding({ onLogin, onRegister }: PublicLandingProps) {
-  const [legalDocument, setLegalDocument] = useState<LegalDocument | null>(null);
-
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#05060b] text-slate-100 selection:bg-violet-400/30">
       <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-[42rem] bg-[radial-gradient(ellipse_at_top,rgba(124,58,237,0.17),transparent_67%)]" />
@@ -126,7 +103,7 @@ export function PublicLanding({ onLogin, onRegister }: PublicLandingProps) {
             <div className="relative">
               <Eyebrow>Acceso Founders</Eyebrow>
               <h2 className="mt-4 text-3xl font-semibold tracking-[-0.035em] text-white sm:text-4xl" id="founders-title">Entrá en la etapa inicial.</h2>
-              <p className="mt-4 max-w-xl text-sm leading-6 text-slate-300 sm:text-base sm:leading-7">Acceso permanente a Nexo Digital Pro para quienes ingresen durante la etapa Founders.</p>
+              <p className="mt-4 max-w-xl text-sm leading-6 text-slate-300 sm:text-base sm:leading-7">Acceso sin vencimiento programado mientras la modalidad Founders y el servicio continúen operativos.</p>
               <p className="mt-4 flex items-center gap-2 text-sm font-medium text-violet-100"><Check className="h-4 w-4 text-violet-300" />Sin suscripción mensual para miembros Founders.</p>
             </div>
             <div className="relative mt-8 border-t border-white/8 pt-7 lg:mt-0 lg:min-w-64 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0">
@@ -146,10 +123,10 @@ export function PublicLanding({ onLogin, onRegister }: PublicLandingProps) {
         <section aria-labelledby="servicio-title" className="grid gap-10 border-y border-white/[0.07] py-20 sm:py-24 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20">
           <div>
             <Eyebrow>Información del servicio</Eyebrow>
-            <h2 className="mt-4 text-3xl font-semibold tracking-[-0.035em] text-white sm:text-5xl" id="servicio-title">Qué es Nexo Digital Pro</h2>
+            <h2 className="mt-4 text-3xl font-semibold tracking-[-0.035em] text-white sm:text-5xl" id="servicio-title">Qué es {PRODUCT_DISPLAY_NAME}</h2>
           </div>
           <div className="space-y-5 text-base leading-7 text-slate-300 sm:text-lg sm:leading-8">
-            <p>Nexo Digital Pro procesa indicadores, niveles y estructura de mercado mediante reglas técnicas definidas. Ordena esa información para que puedas consultar el contexto de BTC desde una interfaz clara.</p>
+            <p>{PRODUCT_DISPLAY_NAME} procesa indicadores, niveles y estructura de mercado mediante reglas técnicas definidas. Ordena esa información para que puedas consultar el contexto de BTC desde una interfaz clara.</p>
             <p className="text-slate-400">No reemplaza tu criterio, no administra capital y no conecta tu cuenta con un bróker o una plataforma de intercambio para ejecutar operaciones.</p>
           </div>
         </section>
@@ -178,7 +155,7 @@ export function PublicLanding({ onLogin, onRegister }: PublicLandingProps) {
               <h2 className="mt-2 text-xl font-semibold text-white sm:text-2xl" id="riesgo-title">Las decisiones y el riesgo siguen bajo tu control.</h2>
               <div className="mt-4 space-y-3 text-sm leading-6 text-slate-300 sm:text-base sm:leading-7">
                 <p>{PRODUCT_DISPLAY_NAME} brinda señales informativas y herramientas técnicas; no constituye asesoramiento financiero. No garantiza ganancias y los resultados históricos no garantizan resultados futuros.</p>
-                <p>Vos decidís si operás. Nexo Digital Pro no ejecuta operaciones, no administra fondos y no abre ni cierra posiciones por el usuario.</p>
+                <p>Vos decidís si operás. {PRODUCT_DISPLAY_NAME} no ejecuta operaciones, no administra fondos y no abre ni cierra posiciones por el usuario.</p>
               </div>
             </div>
           </div>
@@ -194,7 +171,7 @@ export function PublicLanding({ onLogin, onRegister }: PublicLandingProps) {
         <section className="pb-20 sm:pb-28">
           <div className="rounded-[1.75rem] border border-white/8 bg-[#0a0b12] px-5 py-12 text-center sm:px-10 sm:py-16">
             <Sparkles className="mx-auto h-6 w-6 text-violet-300" strokeWidth={1.7} />
-            <h2 className="mx-auto mt-5 max-w-2xl text-3xl font-semibold tracking-[-0.04em] text-white sm:text-5xl">Creá tu cuenta y conocé Nexo Digital Pro</h2>
+            <h2 className="mx-auto mt-5 max-w-2xl text-3xl font-semibold tracking-[-0.04em] text-white sm:text-5xl">Creá tu cuenta y conocé {PRODUCT_DISPLAY_NAME}</h2>
             <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-slate-400 sm:text-base">Registrate, elegí tu método de pago y enviá la solicitud desde tu cuenta.</p>
             <div className="mx-auto mt-8 flex max-w-md flex-col justify-center gap-3 min-[430px]:flex-row">
               <PrimaryButton onClick={onRegister}>Crear cuenta</PrimaryButton>
@@ -211,15 +188,17 @@ export function PublicLanding({ onLogin, onRegister }: PublicLandingProps) {
             <p className="mt-4 max-w-md text-xs leading-5 text-slate-500">Análisis técnico e información de mercado. No constituye asesoramiento financiero ni ejecuta operaciones.</p>
           </div>
           <nav aria-label="Información legal" className="flex max-w-xl flex-wrap gap-x-5 gap-y-3 text-xs font-medium text-slate-400">
-            <FooterButton onClick={() => setLegalDocument("terms")}>Términos y Condiciones</FooterButton>
-            <FooterButton onClick={() => setLegalDocument("privacy")}>Política de Privacidad</FooterButton>
-            <FooterButton onClick={() => setLegalDocument("refunds")}>Política de Reembolsos</FooterButton>
-            <FooterButton onClick={() => setLegalDocument("contact")}>Contacto</FooterButton>
+             <FooterLink href="/terminos">Términos y Condiciones</FooterLink>
+             <FooterLink href="/privacidad">Política de Privacidad</FooterLink>
+             <FooterLink href="/reembolsos">Reembolsos</FooterLink>
+             <FooterLink href="/descargo-de-responsabilidad">Descargo</FooterLink>
+             <FooterLink href="/propiedad-intelectual">Propiedad intelectual</FooterLink>
+             <FooterLink href="/contacto">Contacto</FooterLink>
           </nav>
         </div>
       </footer>
 
-      {legalDocument ? <LegalNotice document={legalDocument} onClose={() => setLegalDocument(null)} /> : null}
+      <nav aria-label="Acciones de consumo" className="fixed inset-x-3 bottom-3 z-40 grid gap-2 rounded-2xl border border-violet-300/20 bg-[#0b0d1b]/95 p-2 shadow-2xl backdrop-blur sm:inset-x-auto sm:right-4 sm:grid-cols-2"><a className="flex min-h-12 items-center justify-center rounded-xl bg-violet-400 px-4 text-center text-xs font-bold text-[#150c2d]" href="/arrepentimiento">BOTÓN DE ARREPENTIMIENTO</a><a className="flex min-h-12 items-center justify-center rounded-xl border border-white/12 px-4 text-center text-xs font-bold text-white" href="/baja-de-servicio">BOTÓN DE BAJA DE SERVICIO</a></nav>
     </main>
   );
 }
@@ -288,11 +267,6 @@ function Faq({ question, answer }: { question: string; answer: string }) {
   return <details className="group"><summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-5 py-5 text-left text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-300 sm:text-base"><span>{question}</span><ChevronDown className="h-4 w-4 shrink-0 text-slate-500 transition group-open:rotate-180 group-open:text-violet-300" /></summary><p className="max-w-3xl pb-6 pr-7 text-sm leading-6 text-slate-400 sm:text-base sm:leading-7">{answer}</p></details>;
 }
 
-function FooterButton({ children, onClick }: { children: string; onClick: () => void }) {
-  return <button className="inline-flex min-h-11 items-center text-left underline-offset-4 transition hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300" onClick={onClick} type="button">{children}</button>;
-}
-
-function LegalNotice({ document, onClose }: { document: LegalDocument; onClose: () => void }) {
-  const content = legalDocuments[document];
-  return <div aria-labelledby="legal-title" aria-modal="true" className="fixed inset-0 z-50 grid place-items-end bg-black/75 p-3 backdrop-blur-sm sm:place-items-center" role="dialog"><button aria-label="Cerrar información legal" className="absolute inset-0 cursor-default" onClick={onClose} type="button" /><div className="relative w-full max-w-lg rounded-[1.4rem] border border-white/10 bg-[#0c0d15] p-6 shadow-2xl sm:p-8"><button aria-label="Cerrar" className="absolute right-4 top-4 grid h-11 w-11 place-items-center rounded-full border border-white/8 text-slate-400 transition hover:bg-white/5 hover:text-white" onClick={onClose} type="button"><X className="h-4 w-4" /></button><p className="text-[0.68rem] font-bold uppercase tracking-[0.2em] text-violet-300">Documento pendiente de publicación</p><h2 className="mt-3 pr-10 text-2xl font-semibold text-white" id="legal-title">{content.title}</h2><p className="mt-4 text-sm leading-6 text-slate-300">{content.body}</p><button className="mt-7 min-h-11 w-full rounded-xl bg-white/[0.06] text-sm font-semibold text-white transition hover:bg-white/10" onClick={onClose} type="button">Entendido</button></div></div>;
+function FooterLink({ children, href }: { children: string; href: string }) {
+  return <a className="inline-flex min-h-11 items-center text-left underline-offset-4 transition hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300" href={href}>{children}</a>;
 }

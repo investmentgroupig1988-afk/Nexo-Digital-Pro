@@ -4,10 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
   getAdminAudit: vi.fn(),
+  getAdminConsumerRequests: vi.fn(),
   getAdminPaymentRequests: vi.fn(),
+  getAdminReadiness: vi.fn(),
+  getAdminSignalEngineHealth: vi.fn(),
   getAdminUsers: vi.fn(),
   grantManualAccess: vi.fn(),
   restoreAccess: vi.fn(),
+  reviewConsumerRequest: vi.fn(),
   reviewPaymentRequest: vi.fn(),
   revokeAccess: vi.fn(),
   setUserBlocked: vi.fn(),
@@ -57,6 +61,9 @@ beforeEach(() => {
   api.getAdminUsers.mockResolvedValue({ users: [member] });
   api.getAdminPaymentRequests.mockResolvedValue({ requests: [paymentRequest] });
   api.getAdminAudit.mockResolvedValue({ audit: [] });
+  api.getAdminConsumerRequests.mockResolvedValue({ requests: [] });
+  api.getAdminSignalEngineHealth.mockResolvedValue({ scheduler: { running: true, cycleRunning: false, startedAt: "2026-01-01T00:00:00.000Z", lastCycleStartedAt: "2026-01-01T00:01:00.000Z", lastCycleCompletedAt: "2026-01-01T00:01:01.000Z", nextRunAt: "2026-01-01T00:02:00.000Z", intervalMs: 60_000 }, symbol: "BTCUSDT", provider: "binance", notifications: { lastDispatchAt: null, lastErrorAt: null }, timeframes: ["5m", "15m", "1h", "4h"].map((timeframe) => ({ timeframe, provider: "binance", symbol: "BTCUSDT", lastScanAt: "2026-01-01T00:01:00.000Z", lastFetchAt: "2026-01-01T00:01:00.000Z", lastCandleAt: "2026-01-01T00:00:00.000Z", lastOutcome: "NO_SIGNAL", lastSignalCreatedAt: null, lastErrorAt: null, lastError: null })) });
+  api.getAdminReadiness.mockResolvedValue({ checkedAt: "2026-01-01T00:01:01.000Z", releaseReady: false, blockers: ["LEGAL_CONFIG"], database: { status: "OK" }, auth: { status: "OK" }, email: { configured: true }, telegram: { configured: false, lastDispatchAt: null, lastErrorAt: null }, signalScheduler: { status: "OK", running: true, cycleRunning: false, startedAt: "2026-01-01T00:00:00.000Z", lastCycleStartedAt: "2026-01-01T00:01:00.000Z", lastCycleCompletedAt: "2026-01-01T00:01:01.000Z", nextRunAt: "2026-01-01T00:02:00.000Z", intervalMs: 60_000 }, marketProvider: { status: "OK", provider: "binance", symbol: "BTCUSDT", lastFetchAt: "2026-01-01T00:01:00.000Z", lastCandleAt: "2026-01-01T00:00:00.000Z", lastScanAt: "2026-01-01T00:01:00.000Z" }, legal: { status: "INCOMPLETE", missing: ["LEGAL_OPERATOR_NAME"] }, featureGates: { argentinaPayments: "DISABLED", xauusd: "DISABLED", oneMinute: "DISABLED" }, topology: { environment: "STAGING", status: "OK", isolated: true } });
   api.reviewPaymentRequest.mockResolvedValue({ request: { ...paymentRequest, status: "APPROVED" }, grantId: "grant-1" });
   api.grantManualAccess.mockResolvedValue({ access: { hasAccess: true } });
 });
@@ -73,6 +80,9 @@ describe("administración de pagos y accesos", () => {
     expect(screen.getByText("Aprobar y conceder acceso")).toBeTruthy();
     expect(screen.getByText("Solicitar más información")).toBeTruthy();
     expect(container.querySelector("main")?.className).toContain("overflow-x-hidden");
+    expect(await screen.findByText("Bloqueado para lanzamiento público")).toBeTruthy();
+    expect(screen.getByText(/LEGAL_OPERATOR_NAME/)).toBeTruthy();
+    expect(screen.getAllByText("NO_SIGNAL").length).toBe(4);
   });
 
   it("sends approval through the administrative review endpoint", async () => {

@@ -7,6 +7,9 @@ import { getRequestUser } from "../auth/session";
 import { trustedMutationOrigin } from "../middlewares/security";
 import { logger } from "../lib/logger";
 import { recordAuthEvent } from "../services/auth-events";
+import { isEmailDeliveryConfigured } from "../services/email";
+import { PRODUCT } from "@workspace/product";
+import { config } from "../config";
 
 const router: IRouter = Router();
 
@@ -15,6 +18,8 @@ const registrationSchema = z.object({
   username: z.string().trim().min(3).max(32).regex(/^[a-zA-Z0-9_]+$/),
   name: z.string().trim().min(1).max(120).optional(),
   password: z.string().min(12).max(128),
+  acceptTerms: z.literal(true),
+  adultConfirmed: z.literal(true),
 });
 
 const loginSchema = z.object({
@@ -28,6 +33,7 @@ router.post("/register", async (req, res) => {
   try {
     const input = registrationSchema.parse(req.body);
     const normalizedUsername = input.username.toLowerCase();
+    const acceptedAt = new Date();
     getAuth();
     const db = getDatabase();
 
@@ -50,6 +56,10 @@ router.post("/register", async (req, res) => {
         username: normalizedUsername,
         displayUsername: input.username,
         name: input.name ?? input.username,
+        termsVersion: PRODUCT.legalVersion,
+        privacyVersion: PRODUCT.legalVersion,
+        legalAcceptedAt: acceptedAt,
+        adultConfirmedAt: acceptedAt,
       },
       headers: fromNodeHeaders(req.headers),
       asResponse: true,
@@ -102,12 +112,65 @@ router.post("/logout", async (req, res) => {
   }
 });
 
-router.post("/request-password-reset", (_req, res) => {
-  res.status(501).json({ error: "Password recovery is prepared but an email provider is not configured yet." });
+const emailSchema = z.object({ email: z.string().trim().email().max(320).transform((value) => value.toLowerCase()) });
+const resetSchema = z.object({ token: z.string().min(16).max(4_096), newPassword: z.string().min(12).max(128) });
+
+router.post("/request-password-reset", async (req, res) => {
+  try {
+    const input = emailSchema.parse(req.body);
+    if (!isEmailDeliveryConfigured()) {
+      res.status(503).json({ error: "El envío de email todavía no está configurado." });
+      return;
+    }
+    await getAuth().api.requestPasswordReset({
+      body: { email: input.email, redirectTo: `${config.appPublicUrl!}/restablecer-contrasena` },
+      headers: fromNodeHeaders(req.headers),
+    });
+    res.json({ message: "Si existe una cuenta para ese email, recibirás instrucciones para continuar." });
+  } catch (error) {
+    sendAuthRouteError(error, "password-reset-request", res);
+  }
 });
 
-router.post("/send-verification", (_req, res) => {
-  res.status(501).json({ error: "Email verification is prepared but an email provider is not configured yet." });
+router.post("/reset-password", async (req, res) => {
+  try {
+    const input = resetSchema.parse(req.body);
+    const response = await getAuth().api.resetPassword({
+      body: { token: input.token, newPassword: input.newPassword },
+      headers: fromNodeHeaders(req.headers),
+      asResponse: true,
+    });
+    await forwardAuthResponse(response, res);
+  } catch (error) {
+    sendAuthRouteError(error, "password-reset", res);
+  }
+});
+
+router.post("/send-verification", async (req, res) => {
+  try {
+    const input = emailSchema.parse(req.body);
+    if (!isEmailDeliveryConfigured()) {
+      res.status(503).json({ error: "El envío de email todavía no está configurado." });
+      return;
+    }
+    await getAuth().api.sendVerificationEmail({
+      body: { email: input.email, callbackURL: `${config.appPublicUrl!}/verificar-email` },
+      headers: fromNodeHeaders(req.headers),
+    });
+    res.json({ message: "Si la cuenta requiere verificación, recibirás instrucciones por email." });
+  } catch (error) {
+    sendAuthRouteError(error, "email-verification-request", res);
+  }
+});
+
+router.get("/verify-email", async (req, res) => {
+  try {
+    const token = z.string().min(16).max(4_096).parse(req.query.token);
+    const response = await getAuth().api.verifyEmail({ query: { token }, headers: fromNodeHeaders(req.headers), asResponse: true });
+    await forwardAuthResponse(response, res);
+  } catch (error) {
+    sendAuthRouteError(error, "email-verification", res);
+  }
 });
 
 async function forwardAuthResponse(response: globalThis.Response, res: import("express").Response): Promise<void> {
@@ -156,7 +219,7 @@ function getResponseUserId(payload: unknown): string | null {
 
 function sendAuthRouteError(
   error: unknown,
-  stage: "registration" | "login" | "logout",
+  stage: "registration" | "login" | "logout" | "password-reset-request" | "password-reset" | "email-verification-request" | "email-verification",
   res: import("express").Response,
 ): void {
   if (error instanceof z.ZodError) {

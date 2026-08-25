@@ -18,7 +18,7 @@ import {
 const createdAt = timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 const updatedAt = timestamp("updated_at", { withTimezone: true }).notNull().defaultNow();
 
-/** Better Auth core schema, extended with Nexo access-control fields. */
+/** Better Auth core schema, extended with TRENORO access-control fields. */
 export const users = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -30,6 +30,10 @@ export const users = pgTable("user", {
   role: varchar("role", { length: 64 }).notNull().default("user"),
   status: varchar("status", { length: 32 }).notNull().default("active"),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  termsVersion: varchar("terms_version", { length: 32 }),
+  privacyVersion: varchar("privacy_version", { length: 32 }),
+  legalAcceptedAt: timestamp("legal_accepted_at", { withTimezone: true }),
+  adultConfirmedAt: timestamp("adult_confirmed_at", { withTimezone: true }),
   createdAt,
   updatedAt,
 }, (table) => [
@@ -205,7 +209,7 @@ export const subscriptions = pgTable("subscriptions", {
   index("subscriptions_user_status_index").on(table.userId, table.status),
 ]);
 
-/** No signal generator is enabled. This table records a future, auditable signal lifecycle. */
+/** Auditable lifecycle for signals produced by the server-side Signal Engine. */
 export const signals = pgTable("signals", {
   id: uuid("id").defaultRandom().primaryKey(),
   symbol: varchar("symbol", { length: 32 }).notNull(),
@@ -258,6 +262,38 @@ export const notificationDeliveries = pgTable("notification_deliveries", {
   check("notification_deliveries_status_valid", sql`${table.status} IN ('PENDING', 'SENDING', 'DELIVERED', 'FAILED')`),
 ]);
 
+/** Public consumer requests. Refunds and access cancellation always require human review. */
+export const consumerRequests = pgTable("consumer_requests", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  code: varchar("code", { length: 32 }).notNull(),
+  type: varchar("type", { length: 32 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  paymentReference: varchar("payment_reference", { length: 255 }),
+  description: text("description"),
+  status: varchar("status", { length: 16 }).notNull().default("PENDING"),
+  adminNotes: text("admin_notes"),
+  reviewedBy: text("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt,
+  updatedAt,
+}, (table) => [
+  uniqueIndex("consumer_requests_code_unique").on(table.code),
+  index("consumer_requests_status_created_index").on(table.status, table.createdAt),
+  index("consumer_requests_email_created_index").on(table.email, table.createdAt),
+  check("consumer_requests_type_valid", sql`${table.type} IN ('WITHDRAWAL', 'SERVICE_CANCELLATION')`),
+  check("consumer_requests_status_valid", sql`${table.status} IN ('PENDING', 'REVIEWING', 'APPROVED', 'REJECTED', 'COMPLETED')`),
+]);
+
+export const consumerRequestEvents = pgTable("consumer_request_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  requestId: uuid("request_id").notNull().references(() => consumerRequests.id, { onDelete: "cascade" }),
+  actorUserId: text("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+  status: varchar("status", { length: 16 }).notNull(),
+  notes: text("notes"),
+  createdAt,
+}, (table) => [index("consumer_request_events_request_created_index").on(table.requestId, table.createdAt)]);
+
 export const signalDirections = { long: "LONG", short: "SHORT" } as const;
 export const signalStatuses = { open: "OPEN", win: "WIN", loss: "LOSS", expired: "EXPIRED", cancelled: "CANCELLED" } as const;
 
@@ -296,6 +332,8 @@ export const auditActions = {
   paymentRejected: "PAYMENT_REJECTED",
   paymentNeedsReview: "PAYMENT_NEEDS_REVIEW",
   roleChanged: "ROLE_CHANGED",
+  consumerRequestCreated: "CONSUMER_REQUEST_CREATED",
+  consumerRequestUpdated: "CONSUMER_REQUEST_UPDATED",
 } as const;
 
 export const paymentRequestMethods = {
@@ -310,9 +348,24 @@ export const paymentRequestStatuses = {
   needsReview: "NEEDS_REVIEW",
 } as const;
 
+export const consumerRequestTypes = {
+  withdrawal: "WITHDRAWAL",
+  serviceCancellation: "SERVICE_CANCELLATION",
+} as const;
+
+export const consumerRequestStatuses = {
+  pending: "PENDING",
+  reviewing: "REVIEWING",
+  approved: "APPROVED",
+  rejected: "REJECTED",
+  completed: "COMPLETED",
+} as const;
+
 export type AccessPlan = (typeof accessPlans)[keyof typeof accessPlans];
 export type AccessGrantStatus = (typeof accessGrantStatuses)[keyof typeof accessGrantStatuses];
 export type AccessType = (typeof accessTypes)[keyof typeof accessTypes];
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];
 export type PaymentRequestMethod = (typeof paymentRequestMethods)[keyof typeof paymentRequestMethods];
 export type PaymentRequestStatus = (typeof paymentRequestStatuses)[keyof typeof paymentRequestStatuses];
+export type ConsumerRequestType = (typeof consumerRequestTypes)[keyof typeof consumerRequestTypes];
+export type ConsumerRequestStatus = (typeof consumerRequestStatuses)[keyof typeof consumerRequestStatuses];

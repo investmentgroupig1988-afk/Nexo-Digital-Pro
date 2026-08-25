@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createLegalIdentity } from "@workspace/product";
 
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 
@@ -130,4 +131,15 @@ export const config = {
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN?.trim() || undefined,
   telegramChatId: process.env.TELEGRAM_CHAT_ID?.trim() || undefined,
   notificationPublicUrl: parseOptionalHttpUrl("NOTIFICATION_PUBLIC_URL"),
+  resendApiKey: process.env.RESEND_API_KEY?.trim() || undefined,
+  authEmailFrom: process.env.AUTH_EMAIL_FROM?.trim() || undefined,
+  appPublicUrl: parseOptionalUrl("APP_PUBLIC_URL"),
+  supportWhatsappNumber: process.env.SUPPORT_WHATSAPP_NUMBER?.trim() || undefined,
+  legalIdentity: createLegalIdentity({
+    operatorName: process.env.LEGAL_OPERATOR_NAME,
+    taxId: process.env.LEGAL_TAX_ID,
+    address: process.env.LEGAL_ADDRESS,
+    supportEmail: process.env.SUPPORT_EMAIL,
+    legalEmail: process.env.LEGAL_EMAIL,
+  }),
 } as const;

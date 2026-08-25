@@ -6,7 +6,7 @@ import * as schema from "./schema";
 // Consumers must import Drizzle query helpers from this package as well as the
 // schema.  This keeps columns and SQL expressions on the same Drizzle runtime
 // instance when pnpm resolves optional peers differently between workspaces.
-export { and, desc, eq, gt, ilike, inArray, isNull, lte, or } from "drizzle-orm";
+export { and, desc, eq, gt, ilike, inArray, isNull, lte, or, sql } from "drizzle-orm";
 
 const { Pool } = pg;
 

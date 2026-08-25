@@ -11,5 +11,4 @@ export type GetTechnicalIndicatorsSymbol = typeof GetTechnicalIndicatorsSymbol[k
 
 export const GetTechnicalIndicatorsSymbol = {
   BTCUSDT: 'BTCUSDT',
-  XAUUSD: 'XAUUSD',
 } as const;

@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { HistoricalCandle } from './historicalCandle';
+import type { HistoricalCandlesAvailableTimeframesItem } from './historicalCandlesAvailableTimeframesItem';
 import type { HistoricalCandlesProvider } from './historicalCandlesProvider';
 import type { HistoricalCandlesStatus } from './historicalCandlesStatus';
 import type { HistoricalCandlesSymbol } from './historicalCandlesSymbol';
@@ -16,7 +17,7 @@ export interface HistoricalCandles {
   timeframe: string;
   provider: HistoricalCandlesProvider;
   candles: HistoricalCandle[];
-  availableTimeframes: string[];
+  availableTimeframes: HistoricalCandlesAvailableTimeframesItem[];
   /** @nullable */
   message: null;
 }

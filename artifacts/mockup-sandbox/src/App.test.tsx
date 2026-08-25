@@ -136,16 +136,15 @@ describe("commercial access shell", () => {
     expect(screen.queryByRole("heading", { name: "Señales claras para seguir BTC con más contexto." })).toBeNull();
   });
 
-  it("opens FAQ and legal information without inventing unpublished policies", async () => {
+  it("opens FAQ and exposes the published legal routes", async () => {
     api.getAccount.mockRejectedValue(new Error("not signed in"));
     renderApp();
-    const question = await screen.findByText("¿Nexo Digital Pro ejecuta operaciones?");
+    const question = await screen.findByText("¿TRENORO ejecuta operaciones?");
     fireEvent.click(question);
     expect(screen.getByText(/cada usuario decide si opera/i)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Política de Reembolsos" }));
-    expect(screen.getByRole("dialog")).toBeTruthy();
-    expect(screen.getByText("Documento pendiente de publicación")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Cerrar" }).className).toContain("h-11");
+    expect(screen.getByRole("link", { name: "Reembolsos" }).getAttribute("href")).toBe("/reembolsos");
+    expect(screen.getByRole("link", { name: "BOTÓN DE ARREPENTIMIENTO" }).getAttribute("href")).toBe("/arrepentimiento");
+    expect(screen.getByRole("link", { name: "BOTÓN DE BAJA DE SERVICIO" }).getAttribute("href")).toBe("/baja-de-servicio");
   });
 
   it("keeps a signed-in user without entitlement out of the private panel", async () => {
@@ -155,8 +154,8 @@ describe("commercial access shell", () => {
     expect(screen.queryByText("Panel de análisis con acceso")).toBeNull();
     expect(await screen.findByRole("button", { name: "Obtener acceso" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Obtener acceso" }));
-    expect((screen.getByRole("button", { name: /Mercado Pago \/ transferencia/i }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText("Próximamente · datos no configurados")).toBeTruthy();
+    expect((screen.getByRole("button", { name: /Transferencia Argentina/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Próximamente · deshabilitado")).toBeTruthy();
     expect((screen.getByRole("button", { name: "CONTACTAR POR WHATSAPP" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText("Solicitá el acceso para poder contactar por WhatsApp.")).toBeTruthy();
     expect(screen.getByText("TJmF8D7twrHckM1LfqPwh64WgYcSgURKRS")).toBeTruthy();
@@ -258,7 +257,7 @@ describe("commercial access shell", () => {
     expect((await screen.findByRole("alert")).textContent).toBe("La wallet remitente de TRC20 no es válida.");
   });
 
-  it("enables WhatsApp for an existing pending request without offering or creating a duplicate", async () => {
+  it("keeps a pending request idempotent and WhatsApp disabled until configured", async () => {
     api.getAccount.mockResolvedValue(account(false));
     api.getMyPaymentRequests.mockResolvedValue({ requests: [pendingRequest()] });
     renderApp();
@@ -267,12 +266,10 @@ describe("commercial access shell", () => {
     expect(screen.queryByRole("button", { name: "SOLICITUD ENVIADA" })).toBeNull();
     expect(screen.getByRole("status").textContent).toContain("SOLICITUD ENVIADA");
     const contact = screen.getByRole("button", { name: /CONTACTAR POR WHATSAPP/ });
-    expect((contact as HTMLButtonElement).disabled).toBe(false);
+    expect((contact as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(contact);
     expect(api.createPaymentRequest).not.toHaveBeenCalled();
-    expect(window.open).toHaveBeenCalledTimes(1);
-    const openedUrl = vi.mocked(window.open).mock.calls[0]?.[0];
-    expect(typeof openedUrl === "string" ? decodeURIComponent(openedUrl) : "").toContain("ID de solicitud: 5db27aa4-9c43-4ac5-bb7d-5694b1d54150");
+    expect(window.open).not.toHaveBeenCalled();
   });
 
   it("blocks a new payment request while the saved request status cannot be loaded", async () => {
@@ -298,6 +295,19 @@ describe("commercial access shell", () => {
     expect(requestButton.className).toContain("min-h-12");
     expect(contactButton.className).toContain("min-h-12");
     expect(document.querySelector("main")?.className).toContain("overflow-x-hidden");
+  });
+
+  it("keeps Argentina unavailable in the browser while its explicit feature flag is off", async () => {
+    api.getAccount.mockResolvedValue(account(false));
+    renderApp();
+    fireEvent.click(await screen.findByRole("button", { name: "Obtener acceso" }));
+    const argentina = screen.getByRole("button", { name: /Transferencia Argentina/i });
+    expect((argentina as HTMLButtonElement).disabled).toBe(true);
+    expect(argentina.textContent).toContain("deshabilitado");
+    expect(screen.queryByText("0000003100075319042852")).toBeNull();
+    expect(screen.queryByText(/^Pendiente de configuración$/i)).toBeNull();
+    expect(screen.queryByText(/^TODO$/i)).toBeNull();
+    expect(screen.queryByText(/^\[COMPLETAR\]$/i)).toBeNull();
   });
 
   it("opens the analysis panel only after the server reports active access", async () => {

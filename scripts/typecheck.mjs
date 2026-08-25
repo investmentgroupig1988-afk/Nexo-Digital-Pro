@@ -5,6 +5,7 @@ const projects = [
   // build so a stale incremental metadata file can never make API typecheck
   // depend on an earlier manual build of @workspace/api-zod.
   ["-b", "lib/api-zod/tsconfig.json", "--force"],
+  ["-p", "lib/product/tsconfig.json", "--noEmit", "--emitDeclarationOnly", "false"],
   ["-p", "lib/api-client-react/tsconfig.json", "--noEmit", "--emitDeclarationOnly", "false"],
   ["-p", "lib/db/tsconfig.json", "--noEmit", "--emitDeclarationOnly", "false"],
   ["-p", "artifacts/api-server/tsconfig.json", "--noEmit"],

@@ -10,7 +10,6 @@ export type GetHistoricalCandlesTimeframe = typeof GetHistoricalCandlesTimeframe
 
 
 export const GetHistoricalCandlesTimeframe = {
-  '1m': '1m',
   '5m': '5m',
   '15m': '15m',
   '1h': '1h',
