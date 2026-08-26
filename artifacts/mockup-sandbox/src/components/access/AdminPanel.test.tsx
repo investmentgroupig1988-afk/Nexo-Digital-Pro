@@ -47,6 +47,7 @@ const paymentRequest = {
   referenceOrTxid: "a".repeat(64),
   payerName: null,
   senderWallet: null,
+  whatsappNumber: "+5492231234567",
   proof: { fileName: "comprobante.pdf", mimeType: "application/pdf", size: 1200, url: "/api/payment-requests/2c9d5cf7-a31c-42ab-a3a1-02cce5e241a9/proof" },
   status: "PENDING",
   notes: null,
@@ -77,12 +78,19 @@ describe("administración de pagos y accesos", () => {
     expect((await screen.findAllByText(member.username)).length).toBeGreaterThan(0);
     expect((await screen.findAllByText(member.email)).length).toBeGreaterThan(0);
     expect(await screen.findByText("comprobante.pdf · 2 KB")).toBeTruthy();
+    expect(screen.getByText("+5492231234567")).toBeTruthy();
     expect(screen.getByText("Aprobar y conceder acceso")).toBeTruthy();
     expect(screen.getByText("Solicitar más información")).toBeTruthy();
     expect(container.querySelector("main")?.className).toContain("overflow-x-hidden");
     expect(await screen.findByText("Bloqueado para lanzamiento público")).toBeTruthy();
     expect(screen.getByText(/LEGAL_OPERATOR_NAME/)).toBeTruthy();
     expect(screen.getAllByText("NO_SIGNAL").length).toBe(4);
+  });
+
+  it("renders historical payment requests without WhatsApp", async () => {
+    api.getAdminPaymentRequests.mockResolvedValue({ requests: [{ ...paymentRequest, id: "historical-request", whatsappNumber: null }] });
+    renderPanel();
+    expect(await screen.findByText("No informado (solicitud histórica)")).toBeTruthy();
   });
 
   it("sends approval through the administrative review endpoint", async () => {

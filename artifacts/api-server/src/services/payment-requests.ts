@@ -31,7 +31,7 @@ export const USDT_TRC20_DESTINATION = "TJmF8D7twrHckM1LfqPwh64WgYcSgURKRS";
 export const MAX_PROOF_BYTES = 5 * 1024 * 1024;
 
 type PaymentDatabase = ReturnType<typeof getDatabase>;
-type PublicPaymentRequestRow = Omit<typeof paymentRequests.$inferSelect, "referenceFingerprint" | "proofDataBase64">;
+type PublicPaymentRequestRow = Omit<typeof paymentRequests.$inferSelect, "referenceFingerprint" | "proofDataBase64" | "whatsappNumber">;
 
 export type ProofInput = {
   fileName: string;
@@ -46,6 +46,7 @@ export type CreatePaymentRequestInput = {
   referenceOrTxid: string;
   payerName?: string;
   senderWallet?: string | null;
+  whatsappNumber: string;
   proof?: ProofInput;
 };
 
@@ -90,6 +91,11 @@ const publicSelection = {
   updatedAt: paymentRequests.updatedAt,
 };
 
+const adminSelection = {
+  ...publicSelection,
+  whatsappNumber: paymentRequests.whatsappNumber,
+};
+
 export async function createPaymentRequest(
   identity: PaymentIdentity,
   input: CreatePaymentRequestInput,
@@ -124,6 +130,7 @@ export async function createPaymentRequest(
       referenceFingerprint: normalized.referenceFingerprint,
       payerName: normalized.payerName,
       senderWallet: normalized.senderWallet,
+      whatsappNumber: normalized.whatsappNumber,
       proofFileName: normalized.proof?.fileName ?? null,
       proofMimeType: normalized.proof?.mimeType ?? null,
       proofSize: normalized.proof?.size ?? null,
@@ -140,6 +147,7 @@ export async function createPaymentRequest(
         method: request.method,
         amount: request.amount,
         currency: request.currency,
+        whatsappContactProvided: true,
       },
       ip: context?.ip,
       userAgent: context?.userAgent,
@@ -161,7 +169,7 @@ export async function listMyPaymentRequests(userId: string, database: PaymentDat
 }
 
 export async function listPaymentRequests(database: PaymentDatabase = getDatabase()) {
-  const requests = await database.select(publicSelection).from(paymentRequests).orderBy(desc(paymentRequests.createdAt));
+  const requests = await database.select(adminSelection).from(paymentRequests).orderBy(desc(paymentRequests.createdAt));
   const identityIds = [...new Set(requests.flatMap((request) => [request.userId, request.reviewedBy]).filter((id): id is string => Boolean(id)))];
   const identities = identityIds.length
     ? await database.select({ id: users.id, email: users.email, username: users.displayUsername }).from(users).where(inArray(users.id, identityIds))
@@ -170,6 +178,7 @@ export async function listPaymentRequests(database: PaymentDatabase = getDatabas
 
   return requests.map((request) => ({
     ...serializePaymentRequest(request),
+    whatsappNumber: request.whatsappNumber,
     user: byId.get(request.userId) ?? null,
     reviewer: request.reviewedBy ? byId.get(request.reviewedBy) ?? null : null,
   }));
@@ -342,6 +351,7 @@ function normalizeInput(input: CreatePaymentRequestInput) {
 
   const payerName = input.payerName?.trim() || null;
   const senderWallet = normalizeOptionalText(input.senderWallet);
+  const whatsappNumber = normalizeWhatsAppNumber(input.whatsappNumber);
   const proof = input.proof ? normalizeProof(input.proof) : null;
   if (method === paymentRequestMethods.mercadoPagoTransfer) {
     if (!payerName || payerName.length > 160) throw new PaymentRequestError("Ingresá el nombre del pagador.");
@@ -366,8 +376,25 @@ function normalizeInput(input: CreatePaymentRequestInput) {
     referenceFingerprint: createHash("sha256").update(normalizedReference).digest("hex"),
     payerName,
     senderWallet,
+    whatsappNumber,
     proof,
   };
+}
+
+export function normalizeWhatsAppNumber(value: string | null | undefined): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new PaymentRequestError("Ingresá un número de WhatsApp de contacto.");
+  }
+  const normalized = value.normalize("NFKC").trim();
+  if (!/^(?:\+|00)[0-9\s().-]+$/.test(normalized)) {
+    throw new PaymentRequestError("El número de WhatsApp debe incluir código internacional y tener un formato válido.");
+  }
+  const international = normalized.startsWith("00") ? `+${normalized.slice(2)}` : normalized;
+  const digits = international.slice(1).replace(/[\s().-]/g, "");
+  if (!/^[1-9]\d{7,14}$/.test(digits)) {
+    throw new PaymentRequestError("El número de WhatsApp debe incluir código internacional y tener un formato válido.");
+  }
+  return `+${digits}`;
 }
 
 function normalizeOptionalText(value: string | null | undefined): string | null {

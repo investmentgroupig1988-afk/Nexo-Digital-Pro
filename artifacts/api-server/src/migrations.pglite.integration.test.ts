@@ -16,7 +16,7 @@ test("the production migration set applies from empty PostgreSQL and is idempote
     const first = await client.query<{ count: number }>(
       'select count(*)::int as count from drizzle."__drizzle_migrations"',
     );
-    assert.equal(first.rows[0]?.count, 6);
+    assert.equal(first.rows[0]?.count, 7);
 
     await migrate(database, { migrationsFolder });
     const second = await client.query<{ count: number }>(
@@ -66,6 +66,24 @@ test("0005 upgrades a populated 0004 database without losing identities, grants,
     assert.deepEqual(legalColumns.rows[0], { terms_version: null, privacy_version: null });
     const consumerTables = await client.query<{ table_name: string }>("select table_name from information_schema.tables where table_schema = 'public' and table_name in ('consumer_requests', 'consumer_request_events') order by table_name");
     assert.deepEqual(consumerTables.rows.map((row) => row.table_name), ["consumer_request_events", "consumer_requests"]);
+  } finally {
+    await client.close();
+  }
+});
+
+test("0006 preserves historical payment requests without WhatsApp", async () => {
+  const client = new PGlite();
+  try {
+    const files = (await readdir(migrationsFolder)).filter((file) => /^000[0-5]_.+\.sql$/.test(file)).sort();
+    for (const file of files) await applySqlFile(client, resolve(migrationsFolder, file));
+    await client.exec(`
+      INSERT INTO "user" ("id", "name", "email", "username", "display_username") VALUES ('historical-user', 'Historical User', 'historical@example.test', 'historical_user', 'historical_user');
+      INSERT INTO "payment_requests" ("user_id", "method", "amount", "currency", "declared_paid_at", "reference_or_txid", "reference_fingerprint") VALUES ('historical-user', 'USDT_TRC20', 27, 'USDT', now(), '${"d".repeat(64)}', '${"e".repeat(64)}');
+    `);
+
+    await applySqlFile(client, resolve(migrationsFolder, "0006_payment_request_whatsapp.sql"));
+    const historical = await client.query<{ whatsapp_number: string | null }>('select whatsapp_number from "payment_requests" where user_id = \'historical-user\'');
+    assert.deepEqual(historical.rows[0], { whatsapp_number: null });
   } finally {
     await client.close();
   }

@@ -115,6 +115,7 @@ export type PaymentRequest = {
 };
 
 export type AdminPaymentRequest = PaymentRequest & {
+  whatsappNumber: string | null;
   user: { id: string; email: string; username: string } | null;
   reviewer: { id: string; email: string; username: string } | null;
 };
@@ -126,6 +127,7 @@ export type CreatePaymentRequestInput = {
   referenceOrTxid: string;
   payerName?: string;
   senderWallet?: string | null;
+  whatsappNumber: string;
   proof?: { fileName: string; mimeType: string; dataBase64: string };
 };
 

@@ -55,7 +55,7 @@ const faqs = [
   ["¿Cómo se activa mi cuenta después del pago?", "Desde tu cuenta creás una solicitud y cargás la referencia, TXID o comprobante. El equipo revisa el registro y, al aprobarlo, el sistema habilita el acceso Founders."],
   [`¿Puedo usar ${PRODUCT_DISPLAY_NAME} desde el celular?`, "Sí. La experiencia está diseñada primero para celular y se adapta también a tablet y escritorio."],
   ["¿Qué ocurre si tengo un problema con mi acceso?", "Podés contactar al canal oficial de soporte y verificación por WhatsApp. Nunca compartas contraseñas, tokens, cookies ni claves privadas."],
-  ["¿Es obligatorio usar WhatsApp?", "No. La solicitud queda guardada en la plataforma; WhatsApp es un canal opcional de soporte después de enviarla."],
+  ["¿Es obligatorio informar un WhatsApp?", "Sí. Las nuevas solicitudes de pago requieren un número con código internacional para verificación, incidencias de cuenta o pago y soporte relacionado con el servicio. No se utiliza para publicidad sin consentimiento independiente."],
   ["¿Puedo perder el acceso?", "El acceso puede bloquearse o revocarse ante una incidencia de seguridad, fraude o incumplimiento que requiera revisión. Toda decisión queda registrada por el sistema."],
   ["¿Los análisis garantizan resultados?", "No. Todo análisis tiene riesgo y puede fallar. Los resultados históricos tampoco garantizan resultados futuros."],
 ] as const;

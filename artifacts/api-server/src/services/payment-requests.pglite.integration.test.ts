@@ -19,7 +19,11 @@ import { getEffectiveAccess, grantAccess, restoreAccess, revokeAccess } from "./
 import {
   createPaymentRequest,
   DuplicatePaymentReferenceError,
+  listMyPaymentRequests,
+  listPaymentRequests,
+  normalizeWhatsAppNumber,
   reviewPaymentRequest,
+  type CreatePaymentRequestInput,
 } from "./payment-requests";
 
 const migrationFolder = resolve(import.meta.dirname, "../../../../lib/db/drizzle");
@@ -45,6 +49,11 @@ const identities = {
   validWallet: identity("valid-wallet", "user"),
   invalidWallet: identity("invalid-wallet", "user"),
   argentinaTamper: identity("argentina-tamper", "user"),
+  missingWhatsappUsdt: identity("miss-wa-usdt", "user"),
+  missingWhatsappArgentina: identity("miss-wa-ars", "user"),
+  invalidWhatsapp: identity("bad-wa", "user"),
+  normalizedWhatsapp: identity("norm-wa", "user"),
+  historical: identity("historic", "user"),
 };
 
 before(async () => {
@@ -66,12 +75,20 @@ after(async () => {
   await pglite.close();
 });
 
-test("user creates a persisted request and WhatsApp remains optional", async () => {
+test("USDT creates a persisted request with normalized mandatory WhatsApp", async () => {
   const result = await createPaymentRequest(identities.member, usdtRequest("a"), undefined, serviceDatabase);
   const [stored] = await database.select().from(paymentRequests).where(eq(paymentRequests.id, result.request.id));
   assert.ok(stored);
   assert.equal(stored.status, "PENDING");
   assert.equal(stored.proofDataBase64, null);
+  assert.equal(stored.whatsappNumber, "+5492231234567");
+  assert.equal("whatsappNumber" in result.request, false);
+
+  const requestedAudit = (await database.select().from(auditLogs).where(eq(auditLogs.targetUserId, identities.member.id)))
+    .find((entry) => entry.action === auditActions.paymentRequested);
+  const requestedMetadata = requestedAudit?.metadata as Record<string, unknown> | undefined;
+  assert.equal(requestedMetadata?.whatsappContactProvided, true);
+  assert.doesNotMatch(JSON.stringify(requestedMetadata), /\+5492231234567/);
 
   if (result.whatsappUrl) {
     const message = new URL(result.whatsappUrl).searchParams.get("text") ?? "";
@@ -91,6 +108,60 @@ test("user creates a persisted request and WhatsApp remains optional", async () 
     () => createPaymentRequest(identities.member, usdtRequest("c"), undefined, serviceDatabase),
     /Ya tenés una solicitud abierta/,
   );
+});
+
+test("Argentina and USDT reject a new request without WhatsApp", async () => {
+  const missingUsdt = { ...usdtRequest("6"), whatsappNumber: undefined } as unknown as CreatePaymentRequestInput;
+  const missingArgentina = { ...localRequest("operation-missing-whatsapp"), whatsappNumber: undefined } as unknown as CreatePaymentRequestInput;
+  await assert.rejects(
+    () => createPaymentRequest(identities.missingWhatsappUsdt, missingUsdt, undefined, serviceDatabase),
+    /Ingresá un número de WhatsApp de contacto/,
+  );
+  await assert.rejects(
+    () => createPaymentRequest(identities.missingWhatsappArgentina, missingArgentina, undefined, serviceDatabase),
+    /Ingresá un número de WhatsApp de contacto/,
+  );
+});
+
+test("WhatsApp rejects local or malformed numbers and normalizes international input", async () => {
+  await assert.rejects(
+    () => createPaymentRequest(identities.invalidWhatsapp, { ...usdtRequest("7"), whatsappNumber: "223 123 4567" }, undefined, serviceDatabase),
+    /código internacional/,
+  );
+  assert.equal(normalizeWhatsAppNumber("0054 9 223 123 4567"), "+5492231234567");
+
+  const result = await createPaymentRequest(identities.normalizedWhatsapp, {
+    ...usdtRequest("8"),
+    whatsappNumber: "  +54 (9) 223-123-4567  ",
+  }, undefined, serviceDatabase);
+  const [stored] = await database.select().from(paymentRequests).where(eq(paymentRequests.id, result.request.id));
+  assert.equal(stored.whatsappNumber, "+5492231234567");
+});
+
+test("only the admin listing exposes WhatsApp and historical null values remain readable", async () => {
+  const [historical] = await database.insert(paymentRequests).values({
+    userId: identities.historical.id,
+    method: "USDT_TRC20",
+    amount: "27",
+    currency: "USDT",
+    declaredPaidAt: new Date(),
+    referenceOrTxid: "9".repeat(64),
+    referenceFingerprint: "9".repeat(64),
+  }).returning();
+  assert.equal(historical.whatsappNumber, null);
+
+  const mine = await listMyPaymentRequests(identities.normalizedWhatsapp.id, serviceDatabase);
+  assert.equal(mine.length, 1);
+  assert.ok(mine.every((request) => request.userId === identities.normalizedWhatsapp.id));
+  assert.equal("whatsappNumber" in mine[0], false);
+
+  const historicalMine = await listMyPaymentRequests(identities.historical.id, serviceDatabase);
+  assert.equal(historicalMine.length, 1);
+  assert.equal("whatsappNumber" in historicalMine[0], false);
+
+  const adminRequests = await listPaymentRequests(serviceDatabase);
+  assert.equal(adminRequests.find((request) => request.userId === identities.normalizedWhatsapp.id)?.whatsappNumber, "+5492231234567");
+  assert.equal(adminRequests.find((request) => request.id === historical.id)?.whatsappNumber, null);
 });
 
 test("USDT sender wallet is optional and normalizes null, empty, and whitespace values to null", async () => {
@@ -219,6 +290,7 @@ function usdtRequest(character: string) {
     amount: "27",
     declaredPaidAt: new Date(),
     referenceOrTxid: character.repeat(64),
+    whatsappNumber: "+54 9 223 123 4567",
   };
 }
 
@@ -229,6 +301,7 @@ function localRequest(referenceOrTxid: string) {
     declaredPaidAt: new Date(),
     referenceOrTxid,
     payerName: "Persona de prueba",
+    whatsappNumber: "+54 9 223 123 4567",
     proof: pngProof,
   };
 }

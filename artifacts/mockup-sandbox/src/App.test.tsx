@@ -156,8 +156,13 @@ describe("commercial access shell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Obtener acceso" }));
     expect((screen.getByRole("button", { name: /Transferencia Argentina/i }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText("Próximamente · deshabilitado")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "CONTACTAR POR WHATSAPP" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText("Solicitá el acceso para poder contactar por WhatsApp.")).toBeTruthy();
+    const whatsapp = screen.getByLabelText("WhatsApp de contacto") as HTMLInputElement;
+    expect(whatsapp.required).toBe(true);
+    expect(whatsapp.type).toBe("tel");
+    expect(whatsapp.inputMode).toBe("tel");
+    expect(whatsapp.placeholder).toBe("+54 9 223 123 4567");
+    expect(screen.getByText("Lo utilizaremos únicamente si necesitamos contactarte por esta solicitud o verificar el pago.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /WHATSAPP/ })).toBeNull();
     expect(screen.getByText("TJmF8D7twrHckM1LfqPwh64WgYcSgURKRS")).toBeTruthy();
   });
 
@@ -193,22 +198,23 @@ describe("commercial access shell", () => {
     expect(document.querySelector("textarea[aria-hidden='true']")).toBeNull();
   });
 
-  it("saves without opening WhatsApp, then enables optional contact without creating a duplicate", async () => {
+  it("requires WhatsApp in the saved request and keeps the support shortcut separate", async () => {
     const request = pendingRequest();
     api.getAccount.mockResolvedValue(account(false));
     api.createPaymentRequest.mockResolvedValue({ request, whatsappUrl: "https://wa.me/5491151550781?text=saved-request" });
     renderApp();
     fireEvent.click(await screen.findByRole("button", { name: "Obtener acceso" }));
-    const disabledContact = screen.getByRole("button", { name: "CONTACTAR POR WHATSAPP" });
-    expect((disabledContact as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: /USDT TRC20/i }));
     fireEvent.change(screen.getByLabelText("TXID"), { target: { value: "a".repeat(64) } });
+    fireEvent.change(screen.getByLabelText("WhatsApp de contacto"), { target: { value: "+54 9 223 123 4567" } });
     fireEvent.click(screen.getByRole("button", { name: "SOLICITAR ACCESO" }));
 
     await waitFor(() => expect(api.createPaymentRequest).toHaveBeenCalledTimes(1));
+    expect(api.createPaymentRequest.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ whatsappNumber: "+54 9 223 123 4567" }));
     expect(window.open).not.toHaveBeenCalled();
     expect(await screen.findByText("Solicitud enviada / En revisión")).toBeTruthy();
-    const enabledContact = screen.getByRole("button", { name: /CONTACTAR POR WHATSAPP/ });
+    expect(screen.getByText("Tu solicitud quedó guardada correctamente. Si necesitamos verificar algún dato del pago, podremos contactarte al WhatsApp informado.")).toBeTruthy();
+    const enabledContact = screen.getByRole("button", { name: "ABRIR WHATSAPP" });
     expect((enabledContact as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(enabledContact);
     expect(window.open).toHaveBeenCalledWith("https://wa.me/5491151550781?text=saved-request", "_blank", "noopener,noreferrer");
@@ -223,6 +229,7 @@ describe("commercial access shell", () => {
     fireEvent.click(screen.getByRole("button", { name: /USDT TRC20/i }));
     fireEvent.change(screen.getByLabelText("TXID"), { target: { value: "a".repeat(64) } });
     fireEvent.change(screen.getByLabelText("Wallet remitente (opcional)"), { target: { value: "   " } });
+    fireEvent.change(screen.getByLabelText("WhatsApp de contacto"), { target: { value: "+54 9 223 123 4567" } });
     fireEvent.click(screen.getByRole("button", { name: "SOLICITAR ACCESO" }));
 
     await waitFor(() => expect(api.createPaymentRequest).toHaveBeenCalledTimes(1));
@@ -238,6 +245,7 @@ describe("commercial access shell", () => {
     fireEvent.click(screen.getByRole("button", { name: /USDT TRC20/i }));
     fireEvent.change(screen.getByLabelText("TXID"), { target: { value: "b".repeat(64) } });
     fireEvent.change(screen.getByLabelText("Wallet remitente (opcional)"), { target: { value: `  ${wallet}  ` } });
+    fireEvent.change(screen.getByLabelText("WhatsApp de contacto"), { target: { value: "+54 9 223 123 4567" } });
     fireEvent.click(screen.getByRole("button", { name: "SOLICITAR ACCESO" }));
 
     await waitFor(() => expect(api.createPaymentRequest).toHaveBeenCalledTimes(1));
@@ -252,12 +260,13 @@ describe("commercial access shell", () => {
     fireEvent.click(screen.getByRole("button", { name: /USDT TRC20/i }));
     fireEvent.change(screen.getByLabelText("TXID"), { target: { value: "c".repeat(64) } });
     fireEvent.change(screen.getByLabelText("Wallet remitente (opcional)"), { target: { value: "invalid-wallet" } });
+    fireEvent.change(screen.getByLabelText("WhatsApp de contacto"), { target: { value: "+54 9 223 123 4567" } });
     fireEvent.click(screen.getByRole("button", { name: "SOLICITAR ACCESO" }));
 
     expect((await screen.findByRole("alert")).textContent).toBe("La wallet remitente de TRC20 no es válida.");
   });
 
-  it("keeps a pending request idempotent and WhatsApp disabled until configured", async () => {
+  it("keeps a pending request idempotent without inventing a support shortcut", async () => {
     api.getAccount.mockResolvedValue(account(false));
     api.getMyPaymentRequests.mockResolvedValue({ requests: [pendingRequest()] });
     renderApp();
@@ -265,9 +274,7 @@ describe("commercial access shell", () => {
     expect(screen.queryByRole("button", { name: "Obtener acceso" })).toBeNull();
     expect(screen.queryByRole("button", { name: "SOLICITUD ENVIADA" })).toBeNull();
     expect(screen.getByRole("status").textContent).toContain("SOLICITUD ENVIADA");
-    const contact = screen.getByRole("button", { name: /CONTACTAR POR WHATSAPP/ });
-    expect((contact as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(contact);
+    expect(screen.queryByRole("button", { name: /WHATSAPP/ })).toBeNull();
     expect(api.createPaymentRequest).not.toHaveBeenCalled();
     expect(window.open).not.toHaveBeenCalled();
   });
@@ -291,9 +298,9 @@ describe("commercial access shell", () => {
     renderApp();
     fireEvent.click(await screen.findByRole("button", { name: "Obtener acceso" }));
     const requestButton = screen.getByRole("button", { name: "SOLICITAR ACCESO" });
-    const contactButton = screen.getByRole("button", { name: "CONTACTAR POR WHATSAPP" });
+    const whatsappInput = screen.getByLabelText("WhatsApp de contacto");
     expect(requestButton.className).toContain("min-h-12");
-    expect(contactButton.className).toContain("min-h-12");
+    expect(whatsappInput.className).toContain("min-h-12");
     expect(document.querySelector("main")?.className).toContain("overflow-x-hidden");
   });
 

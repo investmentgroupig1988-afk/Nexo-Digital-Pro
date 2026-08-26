@@ -8,7 +8,15 @@ const baseRequest = {
   amount: "27",
   declaredPaidAt: new Date().toISOString(),
   referenceOrTxid: "a".repeat(64),
+  whatsappNumber: "+54 9 223 123 4567",
 };
+
+test("HTTP input requires WhatsApp for Argentina and USDT requests", () => {
+  for (const method of ["MERCADO_PAGO_TRANSFER", "USDT_TRC20"] as const) {
+    const { whatsappNumber: _whatsappNumber, ...withoutWhatsapp } = { ...baseRequest, method };
+    assert.equal(createPaymentRequestSchema.safeParse(withoutWhatsapp).success, false);
+  }
+});
 
 test("HTTP input normalizes every omitted sender wallet representation", () => {
   for (const senderWallet of [undefined, null, "", "   \t "]) {

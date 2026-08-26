@@ -167,6 +167,9 @@ export const paymentRequests = pgTable("payment_requests", {
   referenceFingerprint: varchar("reference_fingerprint", { length: 64 }).notNull(),
   payerName: varchar("payer_name", { length: 160 }),
   senderWallet: varchar("sender_wallet", { length: 128 }),
+  // Nullable for payment requests created before WhatsApp became mandatory.
+  // New requests enforce a normalized international number in the service.
+  whatsappNumber: varchar("whatsapp_number", { length: 32 }),
   proofFileName: varchar("proof_file_name", { length: 160 }),
   proofMimeType: varchar("proof_mime_type", { length: 64 }),
   proofSize: integer("proof_size"),

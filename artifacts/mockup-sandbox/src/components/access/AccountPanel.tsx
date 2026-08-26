@@ -84,7 +84,7 @@ function PaymentAccessSection({ identity, latestRequest, loading, onRetry, reque
   const whatsappUrl = created?.whatsappUrl ?? (savedRequest ? buildWhatsAppUrl(savedRequest, identity) : null);
 
   return <section aria-labelledby="payment-title" className="mt-6 rounded-2xl border border-white/8 bg-[#090a14] p-5 sm:p-7">
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-200">Acceso Founders</p><h2 className="mt-2 text-2xl font-semibold text-white" id="payment-title">Pago único · USD 27</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">Cargá los datos de tu pago y enviá la solicitud. WhatsApp queda disponible después como canal opcional de soporte y verificación.</p></div>{!underReview && !loading && !requestError ? <button className="min-h-12 shrink-0 rounded-xl bg-violet-400 px-5 text-sm font-bold text-[#150c2d] hover:bg-violet-300" onClick={() => setShowForm((value) => !value)} type="button">{showForm ? "Cerrar formulario" : "Obtener acceso"}</button> : null}</div>
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-200">Acceso Founders</p><h2 className="mt-2 text-2xl font-semibold text-white" id="payment-title">Pago único · USD 27</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">Cargá los datos del pago y un WhatsApp de contacto para enviar la solicitud a revisión.</p></div>{!underReview && !loading && !requestError ? <button className="min-h-12 shrink-0 rounded-xl bg-violet-400 px-5 text-sm font-bold text-[#150c2d] hover:bg-violet-300" onClick={() => setShowForm((value) => !value)} type="button">{showForm ? "Cerrar formulario" : "Obtener acceso"}</button> : null}</div>
     {requestError ? <div className="mt-6 rounded-xl border border-rose-300/20 bg-rose-300/[0.06] p-4 text-sm leading-6 text-rose-100" role="alert"><p>No pudimos consultar el estado de tus solicitudes. Reintentá antes de iniciar una nueva.</p><button className="mt-3 min-h-11 rounded-xl border border-rose-200/25 px-4 font-semibold hover:bg-rose-200/10" onClick={onRetry} type="button">Reintentar</button></div> : null}
     {created ? <WhatsAppConfirmation request={created.request} /> : null}
     {!created && underReview ? <div className="mt-6 rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-4 text-sm leading-6 text-amber-100"><strong>Solicitud en revisión.</strong> El equipo usará el registro de la plataforma para validar el pago. {latestRequest?.status === "NEEDS_REVIEW" ? "Revisá las notas del administrador y contactá soporte si te solicitaron información adicional." : "No hace falta crear otra solicitud."}</div> : null}
@@ -100,6 +100,7 @@ function PaymentForm({ pending, error, onSubmit }: { pending: boolean; error: st
   const [reference, setReference] = useState("");
   const [payerName, setPayerName] = useState("");
   const [senderWallet, setSenderWallet] = useState("");
+  const [whatsappNumber, setWhatsAppNumber] = useState("");
   const [proof, setProof] = useState<File | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const isUsdt = method === "USDT_TRC20";
@@ -118,6 +119,7 @@ function PaymentForm({ pending, error, onSubmit }: { pending: boolean; error: st
         referenceOrTxid: reference,
         payerName: isUsdt ? undefined : payerName,
         senderWallet: isUsdt ? senderWallet.trim() || null : undefined,
+        whatsappNumber: whatsappNumber.trim(),
         proof: encodedProof,
       });
     } catch (submitError) {
@@ -135,22 +137,23 @@ function PaymentForm({ pending, error, onSubmit }: { pending: boolean; error: st
       {isUsdt ? <Field id={`${fieldId}-wallet`} label="Wallet remitente (opcional)"><input className={inputClass} id={`${fieldId}-wallet`} maxLength={128} onChange={(event) => setSenderWallet(event.target.value)} placeholder="Comienza con T" value={senderWallet} /></Field> : <Field id={`${fieldId}-payer`} label="Nombre del pagador"><input className={inputClass} id={`${fieldId}-payer`} maxLength={160} onChange={(event) => setPayerName(event.target.value)} required value={payerName} /></Field>}
     </div>
     <Field id={`${fieldId}-proof`} label={`Comprobante ${isUsdt ? "(opcional)" : ""}`}><input accept="application/pdf,image/png,image/jpeg,image/webp" className="mt-2 block min-h-12 w-full rounded-xl border border-dashed border-white/15 bg-[#070912] px-3 py-3 text-sm text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-violet-400/12 file:px-3 file:py-2 file:font-semibold file:text-violet-100" id={`${fieldId}-proof`} onChange={(event) => setProof(event.target.files?.[0] ?? null)} required={!isUsdt} type="file" /><span className="mt-2 block text-xs leading-5 text-slate-500">PDF, PNG, JPG o WEBP · máximo 5 MB.</span></Field>
-    {localError || error ? <p className="mt-5 rounded-xl border border-rose-300/20 bg-rose-300/[0.06] p-3 text-sm text-rose-100" role="alert">{localError ?? error}</p> : null}
-    <div className="mt-6 grid gap-3 sm:grid-cols-2">
-      <button className="min-h-12 w-full rounded-xl bg-violet-400 px-4 text-sm font-bold text-[#150c2d] hover:bg-violet-300 disabled:cursor-wait disabled:opacity-60" disabled={pending} type="submit">{pending ? "ENVIANDO SOLICITUD…" : "SOLICITAR ACCESO"}</button>
-      <button aria-describedby={`${fieldId}-whatsapp-help`} className="min-h-12 w-full cursor-not-allowed rounded-xl border border-white/12 bg-white/[0.025] px-4 text-sm font-bold text-slate-500" disabled type="button">CONTACTAR POR WHATSAPP</button>
+    <div className="mt-4 block">
+      <label className="text-sm font-medium text-slate-300" htmlFor={`${fieldId}-whatsapp`}>WhatsApp de contacto</label>
+      <input aria-describedby={`${fieldId}-whatsapp-help`} autoComplete="tel" className={inputClass} id={`${fieldId}-whatsapp`} inputMode="tel" maxLength={64} onChange={(event) => setWhatsAppNumber(event.target.value)} placeholder="+54 9 223 123 4567" required type="tel" value={whatsappNumber} />
+      <span className="mt-2 block text-xs leading-5 text-slate-500" id={`${fieldId}-whatsapp-help`}>Lo utilizaremos únicamente si necesitamos contactarte por esta solicitud o verificar el pago.</span>
     </div>
-    <p className="mt-3 max-w-2xl text-xs leading-5 text-slate-500" id={`${fieldId}-whatsapp-help`}>Solicitá el acceso para poder contactar por WhatsApp.</p>
+    {localError || error ? <p className="mt-5 rounded-xl border border-rose-300/20 bg-rose-300/[0.06] p-3 text-sm text-rose-100" role="alert">{localError ?? error}</p> : null}
+    <button className="mt-6 min-h-12 w-full rounded-xl bg-violet-400 px-4 text-sm font-bold text-[#150c2d] hover:bg-violet-300 disabled:cursor-wait disabled:opacity-60" disabled={pending} type="submit">{pending ? "ENVIANDO SOLICITUD…" : "SOLICITAR ACCESO"}</button>
     <p className="mt-4 text-xs leading-6 text-slate-400">Comprás acceso Founders Lifetime por {isUsdt ? `${FOUNDERS_OFFER.usdtPrice} USDT mediante TRC20` : FOUNDERS_OFFER.argentina.displayPrice}, sin renovación automática. El acceso dura mientras esta modalidad y el servicio continúen operativos; no es una garantía de existencia perpetua. {PRODUCT_DISPLAY_NAME} no garantiza resultados. Consultá la <a className="font-semibold text-violet-200 underline" href="/reembolsos" target="_blank">política de reembolsos y arrepentimiento</a> antes de pagar.</p>
   </form>;
 }
 
 function WhatsAppConfirmation({ request }: { request: PaymentRequest }) {
-  return <div className="mt-6 rounded-xl border border-emerald-300/20 bg-emerald-300/[0.055] p-4 sm:p-5"><div className="flex items-start gap-3"><CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" /><div className="min-w-0"><p className="font-semibold text-white">Solicitud enviada / En revisión</p><p className="mt-1 break-all text-xs text-slate-400">ID: {request.id}</p><p className="mt-3 text-sm leading-6 text-slate-300">La solicitud quedó guardada correctamente. Podés esperar la revisión o contactar por WhatsApp de forma opcional.</p></div></div></div>;
+  return <div className="mt-6 rounded-xl border border-emerald-300/20 bg-emerald-300/[0.055] p-4 sm:p-5"><div className="flex items-start gap-3"><CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" /><div className="min-w-0"><p className="font-semibold text-white">Solicitud enviada / En revisión</p><p className="mt-1 break-all text-xs text-slate-400">ID: {request.id}</p><p className="mt-3 text-sm leading-6 text-slate-300">Tu solicitud quedó guardada correctamente. Si necesitamos verificar algún dato del pago, podremos contactarte al WhatsApp informado.</p></div></div></div>;
 }
 
 function SubmittedActions({ whatsappUrl }: { whatsappUrl: string | null }) {
-  return <div className="mt-4 grid gap-3 sm:grid-cols-2"><div className="flex min-h-12 w-full items-center justify-center rounded-xl bg-violet-400/70 px-4 text-sm font-bold text-[#150c2d]" role="status"><span aria-hidden="true">✓ </span>SOLICITUD ENVIADA</div><button className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-violet-300/25 bg-violet-400/10 px-4 text-sm font-bold text-violet-100 hover:bg-violet-400/15 disabled:cursor-not-allowed disabled:opacity-50" disabled={!whatsappUrl} onClick={() => whatsappUrl && openWhatsApp(whatsappUrl)} type="button">CONTACTAR POR WHATSAPP <ExternalLink className="h-4 w-4" /></button></div>;
+  return <div className={`mt-4 grid gap-3 ${whatsappUrl ? "sm:grid-cols-2" : ""}`}><div className="flex min-h-12 w-full items-center justify-center rounded-xl bg-violet-400/70 px-4 text-sm font-bold text-[#150c2d]" role="status"><span aria-hidden="true">✓ </span>SOLICITUD ENVIADA</div>{whatsappUrl ? <button className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-violet-300/25 bg-violet-400/10 px-4 text-sm font-bold text-violet-100 hover:bg-violet-400/15" onClick={() => openWhatsApp(whatsappUrl)} type="button">ABRIR WHATSAPP <ExternalLink className="h-4 w-4" /></button> : null}</div>;
 }
 
 function CopyPaymentValue({ label, value }: { label: string; value: string }) {

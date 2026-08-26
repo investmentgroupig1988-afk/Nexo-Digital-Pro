@@ -67,6 +67,7 @@ if (!testDatabaseUrl || !integrationEnabled) {
     assert.equal(body.access.hasAccess, false);
     assert.equal(body.user.role, "user");
     assert.equal((await request("/api/admin/users", { headers: { cookie: memberCookie } })).status, 403);
+    assert.equal((await request("/api/admin/payment-requests", { headers: { cookie: memberCookie } })).status, 403);
   });
 
   test("incorrect credentials fail and a user without entitlement cannot use the private API", async () => {

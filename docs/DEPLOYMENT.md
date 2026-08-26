@@ -25,7 +25,7 @@ VITE_LEGAL_TAX_ID=<CUIT oficial>
 VITE_LEGAL_ADDRESS=<domicilio oficial>
 VITE_SUPPORT_EMAIL=<email oficial>
 VITE_LEGAL_EMAIL=<email legal/privacidad oficial>
-VITE_SUPPORT_WHATSAPP_NUMBER=<número oficial opcional, solo dígitos>
+VITE_SUPPORT_WHATSAPP_NUMBER=<número oficial para el botón ABRIR WHATSAPP, solo dígitos; no reemplaza el contacto obligatorio de la solicitud>
 ```
 
 4. Hacer **Redeploy** sin reutilizar build cache después de cambiar variables.
@@ -61,7 +61,7 @@ LEGAL_TAX_ID=<CUIT oficial>
 LEGAL_ADDRESS=<domicilio oficial>
 SUPPORT_EMAIL=<email oficial>
 LEGAL_EMAIL=<email legal/privacidad oficial>
-SUPPORT_WHATSAPP_NUMBER=<número oficial opcional, solo dígitos>
+SUPPORT_WHATSAPP_NUMBER=<número oficial para el botón ABRIR WHATSAPP, solo dígitos; no reemplaza el contacto obligatorio de la solicitud>
 ```
 
 Los valores entre `<...>` son acciones manuales, no valores para copiar literalmente. Railway debe generar secretos distintos para staging y producción. Después de cargar variables, hacer redeploy y comprobar `/api/healthz`; luego ingresar como admin y revisar `/api/admin/readiness`.

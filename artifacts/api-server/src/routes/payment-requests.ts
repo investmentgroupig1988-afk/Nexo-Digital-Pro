@@ -29,6 +29,7 @@ export const createPaymentRequestSchema = z.object({
   referenceOrTxid: z.string().trim().min(3).max(255),
   payerName: optionalTrimmedString(160),
   senderWallet: optionalTrimmedString(128),
+  whatsappNumber: z.string().trim().min(1).max(64),
   proof: proofSchema.optional(),
 });
 
