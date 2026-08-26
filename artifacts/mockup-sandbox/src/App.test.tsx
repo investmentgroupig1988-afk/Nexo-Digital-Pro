@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildPaymentReviewWhatsAppMessage } from "@workspace/product";
+import { buildPaymentReviewWhatsAppMessage, GLOBAL_SUPPORT_WHATSAPP_MESSAGE } from "@workspace/product";
 
 const api = vi.hoisted(() => ({
   ApiError: class ApiError extends Error {},
@@ -83,6 +83,7 @@ function renderApp() {
 }
 
 beforeEach(() => {
+  window.history.replaceState({}, "", "/");
   vi.clearAllMocks();
   api.getMyPaymentRequests.mockResolvedValue({ requests: [] });
   clipboardWriteText.mockResolvedValue(undefined);
@@ -94,6 +95,108 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllEnvs();
+});
+
+describe("global support footer", () => {
+  it("uses the official number with a generic message and no private data", async () => {
+    vi.stubEnv("VITE_SUPPORT_WHATSAPP_NUMBER", "+5491151550781");
+    api.getAccount.mockRejectedValue(new Error("not signed in"));
+    renderApp();
+
+    const footer = await screen.findByTestId("global-support-footer");
+    expect(within(footer).getByText("¿Necesitás ayuda? Contactá a soporte.")).toBeTruthy();
+    const contact = within(footer).getByRole("link", { name: "CONTACTAR POR WHATSAPP" });
+    expect(contact.className).toContain("min-h-11");
+    expect(contact.className).toContain("w-full");
+    const url = new URL(contact.getAttribute("href") ?? "");
+    expect(url.origin + url.pathname).toBe("https://wa.me/5491151550781");
+    const message = url.searchParams.get("text") ?? "";
+    expect(message).toBe(GLOBAL_SUPPORT_WHATSAPP_MESSAGE);
+    expect(message).not.toMatch(/email|usuario|solicitud|wallet|txid|comprobante|password|cookie|token|person@example/i);
+    expect(message).not.toContain(pendingRequest().id);
+  });
+
+  it("keeps the footer but hides its CTA when support is not configured", async () => {
+    vi.stubEnv("VITE_SUPPORT_WHATSAPP_NUMBER", "");
+    api.getAccount.mockRejectedValue(new Error("not signed in"));
+    renderApp();
+
+    const footer = await screen.findByTestId("global-support-footer");
+    expect(within(footer).getByText("¿Necesitás ayuda? Contactá a soporte.")).toBeTruthy();
+    expect(within(footer).queryByRole("link", { name: "CONTACTAR POR WHATSAPP" })).toBeNull();
+  });
+
+  it("is present on every public direct route", async () => {
+    vi.stubEnv("VITE_SUPPORT_WHATSAPP_NUMBER", "5491151550781");
+    const paths = [
+      "/",
+      "/recuperar-contrasena",
+      "/restablecer-contrasena",
+      "/verificar-email",
+      "/terminos",
+      "/privacidad",
+      "/reembolsos",
+      "/descargo-de-responsabilidad",
+      "/propiedad-intelectual",
+      "/contacto",
+      "/arrepentimiento",
+      "/baja-de-servicio",
+    ];
+
+    for (const path of paths) {
+      cleanup();
+      window.history.replaceState({}, "", path);
+      api.getAccount.mockRejectedValue(new Error("not signed in"));
+      renderApp();
+      const footer = await screen.findByTestId("global-support-footer");
+      expect(within(footer).getByRole("link", { name: "CONTACTAR POR WHATSAPP" })).toBeTruthy();
+    }
+  });
+
+  it("remains visible through login, register, account, payment, dashboard and admin", async () => {
+    vi.stubEnv("VITE_SUPPORT_WHATSAPP_NUMBER", "5491151550781");
+    api.getAccount.mockRejectedValue(new Error("not signed in"));
+    window.history.replaceState({}, "", "/?acceso=login");
+    renderApp();
+    expect(await screen.findByRole("heading", { name: "Iniciá sesión" })).toBeTruthy();
+    expect(screen.getByTestId("global-support-footer")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Registrate" }));
+    expect(await screen.findByRole("heading", { name: "Crea tu cuenta" })).toBeTruthy();
+    expect(screen.getByTestId("global-support-footer")).toBeTruthy();
+
+    cleanup();
+    window.history.replaceState({}, "", "/");
+    api.getAccount.mockResolvedValue(account(false, "admin"));
+    renderApp();
+    expect(await screen.findByText("Sin acceso privado")).toBeTruthy();
+    expect(screen.getByTestId("global-support-footer")).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Obtener acceso" }));
+    expect(await screen.findByRole("button", { name: "SOLICITAR ACCESO" })).toBeTruthy();
+    expect(screen.getByTestId("global-support-footer")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Administración" }));
+    expect(await screen.findByText("Administración protegida")).toBeTruthy();
+    expect(screen.getByTestId("global-support-footer")).toBeTruthy();
+
+    cleanup();
+    api.getAccount.mockResolvedValue(account(true));
+    renderApp();
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir panel privado" }));
+    expect(await screen.findByText("Panel de análisis con acceso")).toBeTruthy();
+    expect(screen.getByTestId("global-support-footer")).toBeTruthy();
+  });
+
+  it.each([360, 390, 430])("keeps the footer structurally contained at %ipx", async (width) => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+    vi.stubEnv("VITE_SUPPORT_WHATSAPP_NUMBER", "5491151550781");
+    api.getAccount.mockRejectedValue(new Error("not signed in"));
+    renderApp();
+
+    const footer = await screen.findByTestId("global-support-footer");
+    const contact = within(footer).getByRole("link", { name: "CONTACTAR POR WHATSAPP" });
+    expect(footer.className).toContain("overflow-x-hidden");
+    expect(contact.className).toContain("max-w-full");
+    expect(contact.className).toContain("min-w-0");
+  });
 });
 
 describe("commercial access shell", () => {

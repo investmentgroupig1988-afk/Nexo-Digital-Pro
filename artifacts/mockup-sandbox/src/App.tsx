@@ -8,6 +8,7 @@ import { PublicLanding } from "@/components/access/PublicLanding";
 import { MarketDashboard } from "@/components/market/MarketDashboard";
 import { AuthRecovery } from "@/components/access/AuthRecovery";
 import { LegalPage, type LegalPath } from "@/components/legal/LegalPages";
+import { GlobalSupportFooter } from "@/components/access/GlobalSupportFooter";
 
 type Page = "landing" | "login" | "register" | "account" | "dashboard" | "admin";
 
@@ -15,11 +16,14 @@ const legalPaths = new Set<LegalPath>(["/terminos", "/privacidad", "/reembolsos"
 
 function App() {
   const path = window.location.pathname.replace(/\/$/, "") || "/";
-  if (legalPaths.has(path as LegalPath)) return <LegalPage path={path as LegalPath} />;
-  if (path === "/recuperar-contrasena") return <AuthRecovery mode="request" />;
-  if (path === "/restablecer-contrasena") return <AuthRecovery mode="reset" />;
-  if (path === "/verificar-email") return <AuthRecovery mode="verify" />;
-  return <ProductApp />;
+  let content;
+  if (legalPaths.has(path as LegalPath)) content = <LegalPage path={path as LegalPath} />;
+  else if (path === "/recuperar-contrasena") content = <AuthRecovery mode="request" />;
+  else if (path === "/restablecer-contrasena") content = <AuthRecovery mode="reset" />;
+  else if (path === "/verificar-email") content = <AuthRecovery mode="verify" />;
+  else content = <ProductApp />;
+
+  return <div className="min-h-screen overflow-x-hidden bg-[#070812]">{content}<GlobalSupportFooter reserveConsumerActions={path === "/"} /></div>;
 }
 
 function ProductApp() {

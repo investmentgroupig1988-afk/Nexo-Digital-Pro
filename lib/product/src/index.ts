@@ -25,6 +25,8 @@ export const PRODUCT_DISPLAY_NAME = PRODUCT.displayName;
 export const PRODUCT_DISPLAY_NAME_UPPER = PRODUCT.uppercaseName;
 export const PRODUCT_MARK = PRODUCT.mark;
 
+export const GLOBAL_SUPPORT_WHATSAPP_MESSAGE = `Hola ${PRODUCT_DISPLAY_NAME}, necesito ayuda con mi cuenta o con el servicio.`;
+
 export function buildPaymentReviewWhatsAppMessage(paymentRequestId: string): string {
   return `Hola ${PRODUCT_DISPLAY_NAME}, ya realicé mi pago y envié la solicitud. Mi ID es: ${paymentRequestId.trim()}. Quisiera solicitar la revisión de mi acceso.`;
 }

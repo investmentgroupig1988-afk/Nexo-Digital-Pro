@@ -25,7 +25,7 @@ VITE_LEGAL_TAX_ID=<CUIT oficial>
 VITE_LEGAL_ADDRESS=<domicilio oficial>
 VITE_SUPPORT_EMAIL=<email oficial>
 VITE_LEGAL_EMAIL=<email legal/privacidad oficial>
-VITE_SUPPORT_WHATSAPP_NUMBER=<número oficial para AVISAR PAGO POR WHATSAPP, solo dígitos; no reemplaza el contacto obligatorio de la solicitud>
+VITE_SUPPORT_WHATSAPP_NUMBER=<número oficial para el footer global y AVISAR PAGO POR WHATSAPP, solo dígitos; copia pública de SUPPORT_WHATSAPP_NUMBER y no reemplaza el contacto obligatorio de la solicitud>
 ```
 
 4. Hacer **Redeploy** sin reutilizar build cache después de cambiar variables.
@@ -61,7 +61,7 @@ LEGAL_TAX_ID=<CUIT oficial>
 LEGAL_ADDRESS=<domicilio oficial>
 SUPPORT_EMAIL=<email oficial>
 LEGAL_EMAIL=<email legal/privacidad oficial>
-SUPPORT_WHATSAPP_NUMBER=<número oficial para AVISAR PAGO POR WHATSAPP, solo dígitos; no reemplaza el contacto obligatorio de la solicitud>
+SUPPORT_WHATSAPP_NUMBER=<número oficial para soporte y AVISAR PAGO POR WHATSAPP, solo dígitos; no reemplaza el contacto obligatorio de la solicitud>
 WHATSAPP_COMMUNITY_URL=<opcional; invitación https://chat.whatsapp.com/...; vacío oculta el botón>
 ```
 
