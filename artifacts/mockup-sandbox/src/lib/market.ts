@@ -1,3 +1,5 @@
+import { formatCommercialDateTime } from "./date-time";
+
 export const MARKET_SYMBOLS = ["BTCUSDT", "XAUUSD"] as const;
 export type MarketSymbol = (typeof MARKET_SYMBOLS)[number];
 
@@ -53,14 +55,12 @@ export function formatPrice(value: number | null | undefined, symbol: MarketSymb
 }
 
 export function formatTimestamp(value: string | null | undefined): string {
-  if (!value) return "No disponible";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "No disponible";
+  return formatCommercialDateTime(value);
+}
 
-  return new Intl.DateTimeFormat("es-AR", {
-    dateStyle: "medium",
-    timeStyle: "medium",
-  }).format(date);
+export function requestedTimeframe(search: string): MarketTimeframe | null {
+  const value = new URLSearchParams(search).get("timeframe");
+  return value && isMarketTimeframe(value) ? value : null;
 }
 
 export function formatBoolean(value: boolean | null): string {

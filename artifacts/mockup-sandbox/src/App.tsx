@@ -9,6 +9,7 @@ import { MarketDashboard } from "@/components/market/MarketDashboard";
 import { AuthRecovery } from "@/components/access/AuthRecovery";
 import { LegalPage, type LegalPath } from "@/components/legal/LegalPages";
 import { GlobalSupportFooter } from "@/components/access/GlobalSupportFooter";
+import { requestedTimeframe, type MarketTimeframe } from "@/lib/market";
 
 type Page = "landing" | "login" | "register" | "account" | "dashboard" | "admin";
 
@@ -27,6 +28,7 @@ function App() {
 }
 
 function ProductApp() {
+  const initialTimeframe = requestedTimeframe(window.location.search) ?? "15m";
   const [page, setPage] = useState<Page>(() => new URLSearchParams(window.location.search).get("acceso") === "login" ? "login" : "landing");
   const queryClient = useQueryClient();
   const account = useQuery({
@@ -65,11 +67,12 @@ function ProductApp() {
     return <PublicLanding onLogin={() => setPage("login")} onRegister={() => setPage("register")} />;
   }
 
-  return <PrivateApp account={signedIn} page={page} onAccount={() => setPage("account")} onAdmin={() => setPage("admin")} onDashboard={navigateDashboard} onLogout={signOut} />;
+  return <PrivateApp account={signedIn} initialTimeframe={initialTimeframe} page={page} onAccount={() => setPage("account")} onAdmin={() => setPage("admin")} onDashboard={navigateDashboard} onLogout={signOut} />;
 }
 
-function PrivateApp({ account, page, onDashboard, onAccount, onAdmin, onLogout }: {
+function PrivateApp({ account, initialTimeframe, page, onDashboard, onAccount, onAdmin, onLogout }: {
   account: AccountResponse;
+  initialTimeframe: MarketTimeframe;
   page: Page;
   onDashboard: () => void;
   onAccount: () => void;
@@ -77,7 +80,7 @@ function PrivateApp({ account, page, onDashboard, onAccount, onAdmin, onLogout }
   onLogout: () => Promise<void>;
 }) {
   if (page === "admin" && account.user.role === "admin") return <AdminPanel account={account} onAccount={onAccount} />;
-  if (page === "dashboard" && account.access.hasAccess) return <MarketDashboard onAccount={onAccount} onAdmin={account.user.role === "admin" ? onAdmin : undefined} onLogout={() => void onLogout()} />;
+  if (page === "dashboard" && account.access.hasAccess) return <MarketDashboard initialTimeframe={initialTimeframe} onAccount={onAccount} onAdmin={account.user.role === "admin" ? onAdmin : undefined} onLogout={() => void onLogout()} />;
   return <AccountPanel account={account} onDashboard={onDashboard} onLogout={onLogout} onAdmin={account.user.role === "admin" ? onAdmin : undefined} />;
 }
 

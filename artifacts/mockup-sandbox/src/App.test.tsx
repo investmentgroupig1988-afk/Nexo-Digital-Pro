@@ -24,7 +24,7 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock("@workspace/api-client-react", () => api);
-vi.mock("@/components/market/MarketDashboard", () => ({ MarketDashboard: () => <div>Panel de análisis con acceso</div> }));
+vi.mock("@/components/market/MarketDashboard", () => ({ MarketDashboard: ({ initialTimeframe }: { initialTimeframe?: string }) => <div><span>Panel de análisis con acceso</span><span data-testid="initial-timeframe">{initialTimeframe}</span></div> }));
 vi.mock("@/components/access/AdminPanel", () => ({ AdminPanel: () => <div>Administración protegida</div> }));
 
 import App from "./App";
@@ -214,6 +214,14 @@ describe("commercial access shell", () => {
     expect(screen.getByRole("heading", { name: "Contexto real" })).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/win rate|p&l|rentabilidad garantizada|clientes activos/i);
   }, 15_000);
+
+  it("does not let a timeframe deep link bypass authentication or entitlement", async () => {
+    window.history.replaceState({}, "", "/?timeframe=15m");
+    api.getAccount.mockRejectedValue(new Error("not signed in"));
+    renderApp();
+    expect(await screen.findByRole("heading", { name: "Señales claras para seguir BTC con más contexto." })).toBeTruthy();
+    expect(screen.queryByText("Panel de análisis con acceso")).toBeNull();
+  });
 
   it("connects public calls to action with registration and login", async () => {
     api.getAccount.mockRejectedValue(new Error("not signed in"));
@@ -452,6 +460,24 @@ describe("commercial access shell", () => {
     fireEvent.click(screen.getByText("Abrir panel privado"));
     expect(await screen.findByText("Panel de análisis con acceso")).toBeTruthy();
     expect(screen.queryByText("Admin")).toBeNull();
+  });
+
+  it("preserves a valid timeframe deep link through entitlement checks", async () => {
+    window.history.replaceState({}, "", "/?timeframe=1h");
+    api.getAccount.mockResolvedValue(account(true));
+    renderApp();
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir panel privado" }));
+    expect(await screen.findByText("Panel de análisis con acceso")).toBeTruthy();
+    expect(screen.getByTestId("initial-timeframe").textContent).toBe("1h");
+  });
+
+  it("ignores invalid or internal-only timeframe deep links", async () => {
+    window.history.replaceState({}, "", "/?timeframe=1m");
+    api.getAccount.mockResolvedValue(account(true));
+    renderApp();
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir panel privado" }));
+    expect(await screen.findByText("Panel de análisis con acceso")).toBeTruthy();
+    expect(screen.getByTestId("initial-timeframe").textContent).toBe("15m");
   });
 
   it("shows the community link only when the entitled account receives a configured URL", async () => {

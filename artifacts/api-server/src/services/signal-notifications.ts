@@ -1,7 +1,8 @@
-import { and, eq, getDatabase, lte, notificationDeliveries, signals } from "@workspace/db";
+import { and, eq, getDatabase, inArray, lte, notificationDeliveries, signals } from "@workspace/db";
 import { config } from "../config";
 import { logger } from "../lib/logger";
-import type { NotificationProvider } from "./notification-provider";
+import type { NotificationProvider, NotificationTimeframe } from "./notification-provider";
+import { COMMERCIAL_SIGNAL_TIMEFRAMES } from "./signal-engine";
 import { TelegramProvider } from "./telegram-provider";
 
 type Database = ReturnType<typeof getDatabase>;
@@ -24,14 +25,26 @@ export function configuredNotificationProvider(): NotificationProvider | null {
 
 export async function dispatchSignalNotifications(provider: NotificationProvider | null = configuredNotificationProvider(), database: Database = getDatabase(), now = new Date(), publicUrl = config.notificationPublicUrl): Promise<NotificationDispatchSummary> {
   if (!provider || !publicUrl) return { configured: false, queued: 0, recoveredClaims: 0, delivered: 0, retried: 0, failed: 0 };
-  const openSignals = await database.select({ id: signals.id }).from(signals).where(eq(signals.status, "OPEN"));
+  const openSignals = await database.select({ id: signals.id }).from(signals).where(and(
+    eq(signals.status, "OPEN"),
+    inArray(signals.timeframe, [...COMMERCIAL_SIGNAL_TIMEFRAMES]),
+  ));
   const queued = openSignals.length
     ? await database.insert(notificationDeliveries).values(openSignals.map(({ id }) => ({ signalId: id, provider: provider.name }))).onConflictDoNothing().returning({ id: notificationDeliveries.id })
     : [];
   if (queued.length) logger.info({ event: "telegram_outbox_queued", count: queued.length, provider: provider.name }, "Signal notifications queued");
   const recovered = await database.update(notificationDeliveries).set({ status: "PENDING", claimedAt: null, nextAttemptAt: now, lastError: "Recovered interrupted delivery claim.", updatedAt: now }).where(and(eq(notificationDeliveries.provider, provider.name), eq(notificationDeliveries.status, "SENDING"), lte(notificationDeliveries.claimedAt, new Date(now.getTime() - CLAIM_TIMEOUT_MS)))).returning({ id: notificationDeliveries.id });
   if (recovered.length) logger.info({ event: "telegram_claim_recovered", count: recovered.length, provider: provider.name }, "Interrupted notification claims recovered");
-  const pending = await database.select({ id: notificationDeliveries.id }).from(notificationDeliveries).where(and(eq(notificationDeliveries.provider, provider.name), eq(notificationDeliveries.status, "PENDING"), lte(notificationDeliveries.nextAttemptAt, now)));
+  const pending = await database
+    .select({ id: notificationDeliveries.id, timeframe: signals.timeframe })
+    .from(notificationDeliveries)
+    .innerJoin(signals, eq(notificationDeliveries.signalId, signals.id))
+    .where(and(
+      eq(notificationDeliveries.provider, provider.name),
+      eq(notificationDeliveries.status, "PENDING"),
+      lte(notificationDeliveries.nextAttemptAt, now),
+      inArray(signals.timeframe, [...COMMERCIAL_SIGNAL_TIMEFRAMES]),
+    ));
   let delivered = 0;
   let retried = 0;
   let failed = 0;
@@ -39,7 +52,7 @@ export async function dispatchSignalNotifications(provider: NotificationProvider
     const [claimed] = await database.update(notificationDeliveries).set({ status: "SENDING", claimedAt: now, updatedAt: now }).where(and(eq(notificationDeliveries.id, candidate.id), eq(notificationDeliveries.status, "PENDING"))).returning();
     if (!claimed) continue;
     try {
-      await provider.sendSignalActive(publicUrl);
+      await provider.sendSignalActive(publicUrl, candidate.timeframe as NotificationTimeframe);
       await database.update(notificationDeliveries).set({ status: "DELIVERED", deliveredAt: new Date(), lastError: null, updatedAt: new Date() }).where(eq(notificationDeliveries.id, candidate.id));
       delivered += 1;
       logger.info({ event: "telegram_outbox_delivered", deliveryId: candidate.id, provider: provider.name }, "Signal notification delivered");

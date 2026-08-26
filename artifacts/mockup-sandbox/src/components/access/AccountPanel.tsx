@@ -11,6 +11,7 @@ import { CheckCircle2, ExternalLink } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Brand } from "./PublicLanding";
 import { buildPaymentReviewWhatsAppMessage, FOUNDERS_OFFER, PRODUCT_DISPLAY_NAME } from "@/config/product";
+import { formatCommercialDateTime } from "@/lib/date-time";
 
 const USDT_WALLET = "TJmF8D7twrHckM1LfqPwh64WgYcSgURKRS";
 const configured = (value: string | undefined) => value?.trim() || null;
@@ -193,7 +194,7 @@ function Field({ id, label, children }: { id: string; label: string; children: R
 function Data({ label, value }: { label: string; value: string }) { return <div><dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</dt><dd className="mt-1 break-words text-sm font-medium text-slate-200">{value}</dd></div>; }
 
 const inputClass = "mt-2 min-h-12 w-full min-w-0 rounded-xl border border-white/10 bg-[#070912] px-3.5 text-sm text-white outline-none placeholder:text-slate-600 focus:border-violet-300/60 disabled:text-slate-400";
-function formatDate(value: string): string { const date = new Date(value); return Number.isNaN(date.getTime()) ? "No disponible" : new Intl.DateTimeFormat("es-AR", { dateStyle: "medium", timeStyle: "short" }).format(date); }
+function formatDate(value: string): string { return formatCommercialDateTime(value); }
 function toLocalDateTimeInput(date: Date): string { const offset = date.getTimezoneOffset() * 60_000; return new Date(date.getTime() - offset).toISOString().slice(0, 16); }
 function planLabel(plan: string | null): string { if (plan === "FOUNDERS_LIFETIME") return "Acceso Founders"; if (plan === "PARTNER") return "Acceso Partner"; if (plan === "TESTER") return "Acceso Tester"; if (plan === "COMPLIMENTARY") return "Acceso de cortesía"; return "Acceso privado"; }
 function accessTypeLabel(type: string): string { return type === "ADMIN_MANUAL" ? "Concesión administrativa" : type === "PAYMENT" ? "Pago verificado" : type === "PROMOTION" ? "Promoción" : type; }

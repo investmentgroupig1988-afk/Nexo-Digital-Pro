@@ -22,6 +22,7 @@ import {
 import { ExternalLink, ReceiptText, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { Brand } from "./PublicLanding";
+import { formatCommercialDateTime } from "@/lib/date-time";
 
 type UserAction = "revoke" | "restore" | "block" | "unblock";
 type ManualPlan = "FOUNDERS_LIFETIME" | "PARTNER" | "TESTER" | "COMPLIMENTARY";
@@ -122,7 +123,7 @@ const controlClass = "mt-2 min-h-11 w-full min-w-0 rounded-xl border border-whit
 function refreshAdmin(queryClient: ReturnType<typeof useQueryClient>) { return Promise.all([queryClient.invalidateQueries({ queryKey: ["admin-users"] }), queryClient.invalidateQueries({ queryKey: ["admin-audit"] }), queryClient.invalidateQueries({ queryKey: ["admin-payment-requests"] }), queryClient.invalidateQueries({ queryKey: ["admin-consumer-requests"] }), queryClient.invalidateQueries({ queryKey: ["admin-signal-engine"] }), queryClient.invalidateQueries({ queryKey: ["admin-readiness"] })]); }
 function consumerActions(status: ConsumerRequestStatus): Array<[Exclude<ConsumerRequestStatus, "PENDING">, string]> { if (status === "PENDING") return [["REVIEWING", "Tomar revisión"], ["APPROVED", "Aprobar"], ["REJECTED", "Rechazar"]]; if (status === "REVIEWING") return [["APPROVED", "Aprobar"], ["REJECTED", "Rechazar"]]; if (status === "APPROVED") return [["COMPLETED", "Marcar completada"], ["REVIEWING", "Reabrir"]]; if (status === "REJECTED") return [["REVIEWING", "Reabrir"]]; return []; }
 function readableError(error: unknown): string { if (!(error instanceof Error)) return "No se pudo completar la acción."; return error.message.replace(/^HTTP \d+ [^:]+:\s*/, ""); }
-function formatDate(value: string): string { const date = new Date(value); return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(date); }
+function formatDate(value: string): string { return formatCommercialDateTime(value, "—"); }
 function formatAmount(value: string): string { return Number(value).toLocaleString("es-AR", { maximumFractionDigits: 8 }); }
 function formatBytes(value: number): string { return value < 1024 * 1024 ? `${Math.ceil(value / 1024)} KB` : `${(value / 1024 / 1024).toFixed(1)} MB`; }
 function methodLabel(method: AdminPaymentRequest["method"]): string { return method === "USDT_TRC20" ? "USDT TRC20" : "Transferencia Argentina"; }

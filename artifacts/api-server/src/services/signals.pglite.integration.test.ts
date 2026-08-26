@@ -59,10 +59,12 @@ test("notification outbox deduplicates repeated and concurrent dispatches", asyn
   const now = new Date();
   await database.insert(signals).values({ symbol: "BTCUSDT", timeframe: "5m", direction: "LONG", entryPrice: "100", stopLoss: "90", takeProfit: "115", riskRewardRatio: "1.5", status: "OPEN", openedAt: now, expiresAt: new Date(now.getTime() + 3_600_000), result: "OPEN", strategyVersion: "NOTIFICATION_TEST", configurationFingerprint: "n".repeat(64), indicatorSnapshot: {} });
   let sends = 0;
-  const provider: NotificationProvider = { name: "telegram", async sendSignalActive() { sends += 1; } };
+  const notifications: Array<{ publicUrl: string; timeframe: string }> = [];
+  const provider: NotificationProvider = { name: "telegram", async sendSignalActive(publicUrl, timeframe) { sends += 1; notifications.push({ publicUrl, timeframe }); } };
   const concurrent = await Promise.all([dispatchSignalNotifications(provider, serviceDatabase, new Date(), "https://staging.trenoro.com/"), dispatchSignalNotifications(provider, serviceDatabase, new Date(), "https://staging.trenoro.com/")]);
   const repeated = await dispatchSignalNotifications(provider, serviceDatabase, new Date(), "https://staging.trenoro.com/");
   assert.equal(sends, 1);
+  assert.deepEqual(notifications, [{ publicUrl: "https://staging.trenoro.com/", timeframe: "5m" }]);
   assert.equal(concurrent.reduce((sum, result) => sum + result.queued, 0), 1);
   assert.equal(concurrent.reduce((sum, result) => sum + result.delivered, 0) + repeated.delivered, 1);
   const deliveries = await database.select().from(notificationDeliveries);
