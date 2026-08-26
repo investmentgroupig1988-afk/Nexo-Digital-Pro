@@ -107,6 +107,16 @@ function parseOptionalHttpUrl(name: string): string | undefined {
   return parsed.toString();
 }
 
+function parseOptionalWhatsAppCommunityUrl(name: string): string | undefined {
+  const value = parseOptionalHttpUrl(name);
+  if (!value) return undefined;
+  const parsed = new URL(value);
+  if (parsed.protocol !== "https:" || parsed.hostname.toLowerCase() !== "chat.whatsapp.com" || parsed.pathname === "/") {
+    throw new Error(`${name} must be an https://chat.whatsapp.com invitation URL.`);
+  }
+  return parsed.toString();
+}
+
 export const config = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: parsePositiveInteger("PORT", 5000),
@@ -135,6 +145,7 @@ export const config = {
   authEmailFrom: process.env.AUTH_EMAIL_FROM?.trim() || undefined,
   appPublicUrl: parseOptionalUrl("APP_PUBLIC_URL"),
   supportWhatsappNumber: process.env.SUPPORT_WHATSAPP_NUMBER?.trim() || undefined,
+  whatsappCommunityUrl: parseOptionalWhatsAppCommunityUrl("WHATSAPP_COMMUNITY_URL"),
   legalIdentity: createLegalIdentity({
     operatorName: process.env.LEGAL_OPERATOR_NAME,
     taxId: process.env.LEGAL_TAX_ID,

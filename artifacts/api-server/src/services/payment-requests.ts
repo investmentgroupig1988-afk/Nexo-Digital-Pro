@@ -23,7 +23,7 @@ import {
 } from "@workspace/db";
 import type { AuditContext } from "./audit";
 import { config } from "../config";
-import { FOUNDERS_OFFER, PRODUCT_DISPLAY_NAME } from "@workspace/product";
+import { buildPaymentReviewWhatsAppMessage, FOUNDERS_OFFER } from "@workspace/product";
 
 export const FOUNDERS_PRICE_USD = String(FOUNDERS_OFFER.usdtPrice);
 export const FOUNDERS_PRICE_ARS = String(FOUNDERS_OFFER.argentina.price);
@@ -157,7 +157,7 @@ export async function createPaymentRequest(
 
   return {
     request: serializePaymentRequest(created),
-    whatsappUrl: buildWhatsAppUrl(created, identity),
+    whatsappUrl: buildPaymentReviewWhatsAppUrl(created.id),
   };
 }
 
@@ -469,24 +469,12 @@ function serializePaymentRequest(value: PublicPaymentRequestRow) {
   };
 }
 
-function buildWhatsAppUrl(request: Pick<typeof paymentRequests.$inferSelect, "id" | "method" | "amount" | "currency" | "referenceOrTxid" | "proofFileName">, identity: PaymentIdentity): string | null {
-  const method = request.method === paymentRequestMethods.usdtTrc20 ? "USDT TRC20" : "Transferencia Argentina";
-  const message = [
-    `Hola, solicito la verificación de mi acceso Founders a ${PRODUCT_DISPLAY_NAME}.`,
-    `ID de solicitud: ${request.id}`,
-    `Usuario: ${identity.username}`,
-    `Email: ${identity.email}`,
-    `Método: ${method}`,
-    `Importe: ${formatAmount(request.amount)} ${request.currency}`,
-    request.method === paymentRequestMethods.usdtTrc20 ? `Wallet destino: ${USDT_TRC20_DESTINATION}` : null,
-    `Referencia / TXID: ${request.referenceOrTxid}`,
-    `Evidencia cargada en la plataforma: ${request.proofFileName ? "Sí" : "No (opcional para USDT)"}.`,
-  ].filter((line): line is string => Boolean(line)).join("\n");
-  return config.supportWhatsappNumber ? `https://wa.me/${config.supportWhatsappNumber}?text=${encodeURIComponent(message)}` : null;
-}
-
-function formatAmount(value: string): string {
-  return Number(value).toLocaleString("es-AR", { maximumFractionDigits: 8 });
+export function buildPaymentReviewWhatsAppUrl(
+  paymentRequestId: string,
+  supportNumber: string | undefined = config.supportWhatsappNumber,
+): string | null {
+  if (!supportNumber) return null;
+  return `https://wa.me/${supportNumber}?text=${encodeURIComponent(buildPaymentReviewWhatsAppMessage(paymentRequestId))}`;
 }
 
 function isApprovedReferenceConstraint(error: unknown): boolean {

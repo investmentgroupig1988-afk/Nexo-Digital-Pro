@@ -17,6 +17,7 @@ import {
 } from "@workspace/db";
 import { getEffectiveAccess, grantAccess, restoreAccess, revokeAccess } from "./access";
 import {
+  buildPaymentReviewWhatsAppUrl,
   createPaymentRequest,
   DuplicatePaymentReferenceError,
   listMyPaymentRequests,
@@ -75,6 +76,19 @@ after(async () => {
   await pglite.close();
 });
 
+test("support WhatsApp CTA contains only the payment request ID", () => {
+  const paymentRequestId = "c7489362-bc9e-41cc-a06f-b7ded8f1ad6a";
+  const url = buildPaymentReviewWhatsAppUrl(paymentRequestId, "5491151550781");
+  assert.ok(url);
+  const message = new URL(url).searchParams.get("text") ?? "";
+  assert.equal(
+    message,
+    `Hola TRENORO, ya realicé mi pago y envié la solicitud. Mi ID es: ${paymentRequestId}. Quisiera solicitar la revisión de mi acceso.`,
+  );
+  assert.match(message, new RegExp(paymentRequestId));
+  assert.doesNotMatch(message, /email|usuario|wallet|txid|referencia|comprobante|password|cookie|token/i);
+});
+
 test("USDT creates a persisted request with normalized mandatory WhatsApp", async () => {
   const result = await createPaymentRequest(identities.member, usdtRequest("a"), undefined, serviceDatabase);
   const [stored] = await database.select().from(paymentRequests).where(eq(paymentRequests.id, result.request.id));
@@ -89,20 +103,6 @@ test("USDT creates a persisted request with normalized mandatory WhatsApp", asyn
   const requestedMetadata = requestedAudit?.metadata as Record<string, unknown> | undefined;
   assert.equal(requestedMetadata?.whatsappContactProvided, true);
   assert.doesNotMatch(JSON.stringify(requestedMetadata), /\+5492231234567/);
-
-  if (result.whatsappUrl) {
-    const message = new URL(result.whatsappUrl).searchParams.get("text") ?? "";
-    assert.match(message, new RegExp(result.request.id));
-    assert.match(message, new RegExp(identities.member.username));
-    assert.match(message, new RegExp(identities.member.email));
-    assert.match(message, /USDT TRC20/);
-    assert.match(message, /27 USDT/);
-    assert.match(message, /TJmF8D7twrHckM1LfqPwh64WgYcSgURKRS/);
-    assert.match(message, /Evidencia cargada en la plataforma/);
-    assert.doesNotMatch(message, /password|cookie|token/i);
-  } else {
-    assert.equal(result.whatsappUrl, null);
-  }
 
   await assert.rejects(
     () => createPaymentRequest(identities.member, usdtRequest("c"), undefined, serviceDatabase),

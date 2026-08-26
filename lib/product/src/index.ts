@@ -25,6 +25,10 @@ export const PRODUCT_DISPLAY_NAME = PRODUCT.displayName;
 export const PRODUCT_DISPLAY_NAME_UPPER = PRODUCT.uppercaseName;
 export const PRODUCT_MARK = PRODUCT.mark;
 
+export function buildPaymentReviewWhatsAppMessage(paymentRequestId: string): string {
+  return `Hola ${PRODUCT_DISPLAY_NAME}, ya realicé mi pago y envié la solicitud. Mi ID es: ${paymentRequestId.trim()}. Quisiera solicitar la revisión de mi acceso.`;
+}
+
 /**
  * Commercial values are code-owned so neither the browser nor a payment
  * request can redefine the effective price. The feature flag that makes the

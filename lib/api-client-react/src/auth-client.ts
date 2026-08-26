@@ -7,6 +7,7 @@ export type AccessSummary = {
   status: "pending" | "active" | "revoked" | "expired" | null;
   grantedAt: string | null;
   expiresAt: string | null;
+  communityUrl: string | null;
 };
 
 export type AccountUser = {

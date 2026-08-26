@@ -29,11 +29,11 @@ const member = {
   status: "active",
   createdAt: "2026-01-01T00:00:00.000Z",
   lastLoginAt: null,
-  access: { hasAccess: false, plan: null, accessType: null, status: null, grantedAt: null, expiresAt: null },
+  access: { hasAccess: false, plan: null, accessType: null, status: null, grantedAt: null, expiresAt: null, communityUrl: null },
 };
 const account = {
   user: { id: "admin-1", email: "admin@example.test", username: "admin", name: "Admin", role: "admin", status: "active", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", lastLoginAt: null },
-  access: { hasAccess: false, plan: null, accessType: null, status: null, grantedAt: null, expiresAt: null },
+  access: { hasAccess: false, plan: null, accessType: null, status: null, grantedAt: null, expiresAt: null, communityUrl: null },
 };
 const paymentRequest = {
   id: "2c9d5cf7-a31c-42ab-a3a1-02cce5e241a9",

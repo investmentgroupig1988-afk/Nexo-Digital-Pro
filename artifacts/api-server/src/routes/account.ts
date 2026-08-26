@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { getEffectiveAccess } from "../services/access";
 import { currentAuthenticatedUser, requireAuthenticatedUser } from "../auth/session";
+import { config } from "../config";
 
 const router: IRouter = Router();
 
@@ -43,6 +44,7 @@ export function serializeAccess(access: Awaited<ReturnType<typeof getEffectiveAc
     status: access.grant?.status ?? null,
     grantedAt: access.grant?.grantedAt ?? null,
     expiresAt: access.grant?.expiresAt ?? null,
+    communityUrl: access.hasAccess ? config.whatsappCommunityUrl ?? null : null,
   };
 }
 

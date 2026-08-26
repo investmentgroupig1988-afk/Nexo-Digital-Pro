@@ -10,11 +10,10 @@ import {
 import { CheckCircle2, ExternalLink } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Brand } from "./PublicLanding";
-import { FOUNDERS_OFFER, PRODUCT_DISPLAY_NAME } from "@/config/product";
+import { buildPaymentReviewWhatsAppMessage, FOUNDERS_OFFER, PRODUCT_DISPLAY_NAME } from "@/config/product";
 
 const USDT_WALLET = "TJmF8D7twrHckM1LfqPwh64WgYcSgURKRS";
 const configured = (value: string | undefined) => value?.trim() || null;
-const SUPPORT_WHATSAPP_NUMBER = configured(import.meta.env.VITE_SUPPORT_WHATSAPP_NUMBER);
 const ARGENTINA_PAYMENTS_ENABLED = import.meta.env.VITE_ARGENTINA_PAYMENTS_ENABLED === "true";
 const MAX_PROOF_BYTES = 5 * 1024 * 1024;
 const ACCEPTED_PROOF_TYPES = new Set(["application/pdf", "image/png", "image/jpeg", "image/webp"]);
@@ -58,16 +57,16 @@ export function AccountPanel({ account, onDashboard, onLogout, onAdmin }: Accoun
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-200">Estado del acceso</p>
             <h2 className="mt-2 text-2xl font-semibold text-white">{access.hasAccess ? planLabel(access.plan) : requestStateTitle(latestRequest)}</h2>
             <p className="mt-3 text-sm leading-6 text-slate-300">{access.hasAccess ? "Tu acceso fue confirmado por el servidor." : requestStateDescription(latestRequest)}</p>
-            {access.hasAccess ? <><dl className="mt-6 space-y-3"><Data label="Estado" value="Activo" /><Data label="Tipo de acceso" value={access.accessType ? accessTypeLabel(access.accessType) : "No disponible"} /><Data label="Fecha de acceso" value={access.grantedAt ? formatDate(access.grantedAt) : "No disponible"} /><Data label="Vencimiento" value={access.expiresAt ? formatDate(access.expiresAt) : "Sin vencimiento"} /></dl><button className="mt-7 min-h-12 w-full rounded-xl bg-violet-400 px-4 py-3 text-sm font-bold text-[#130c29] hover:bg-violet-300" onClick={onDashboard} type="button">Abrir panel privado</button></> : <RequestSummary request={latestRequest} />}
+            {access.hasAccess ? <><dl className="mt-6 space-y-3"><Data label="Estado" value="Activo" /><Data label="Tipo de acceso" value={access.accessType ? accessTypeLabel(access.accessType) : "No disponible"} /><Data label="Fecha de acceso" value={access.grantedAt ? formatDate(access.grantedAt) : "No disponible"} /><Data label="Vencimiento" value={access.expiresAt ? formatDate(access.expiresAt) : "Sin vencimiento"} /></dl><button className="mt-7 min-h-12 w-full rounded-xl bg-violet-400 px-4 py-3 text-sm font-bold text-[#130c29] hover:bg-violet-300" onClick={onDashboard} type="button">Abrir panel privado</button><CommunityAction url={access.communityUrl} /></> : <RequestSummary request={latestRequest} />}
           </article>
         </section>
-        {!access.hasAccess ? <PaymentAccessSection identity={{ email: user.email, username: user.username }} latestRequest={latestRequest} loading={requests.isPending} onRetry={() => void requests.refetch()} requestError={requests.isError} /> : null}
+        {!access.hasAccess ? <PaymentAccessSection latestRequest={latestRequest} loading={requests.isPending} onRetry={() => void requests.refetch()} requestError={requests.isError} /> : null}
       </div>
     </main>
   );
 }
 
-function PaymentAccessSection({ identity, latestRequest, loading, onRetry, requestError }: { identity: { email: string; username: string }; latestRequest: PaymentRequest | null; loading: boolean; onRetry: () => void; requestError: boolean }) {
+function PaymentAccessSection({ latestRequest, loading, onRetry, requestError }: { latestRequest: PaymentRequest | null; loading: boolean; onRetry: () => void; requestError: boolean }) {
   const [showForm, setShowForm] = useState(false);
   const [created, setCreated] = useState<{ request: PaymentRequest; whatsappUrl: string | null } | null>(null);
   const queryClient = useQueryClient();
@@ -81,7 +80,7 @@ function PaymentAccessSection({ identity, latestRequest, loading, onRetry, reque
   });
   const underReview = latestRequest?.status === "PENDING" || latestRequest?.status === "NEEDS_REVIEW" || Boolean(created);
   const savedRequest = created?.request ?? (underReview ? latestRequest : null);
-  const whatsappUrl = created?.whatsappUrl ?? (savedRequest ? buildWhatsAppUrl(savedRequest, identity) : null);
+  const whatsappUrl = created?.whatsappUrl ?? (savedRequest ? buildWhatsAppUrl(savedRequest) : null);
 
   return <section aria-labelledby="payment-title" className="mt-6 rounded-2xl border border-white/8 bg-[#090a14] p-5 sm:p-7">
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-200">Acceso Founders</p><h2 className="mt-2 text-2xl font-semibold text-white" id="payment-title">Pago único · USD 27</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">Cargá los datos del pago y un WhatsApp de contacto para enviar la solicitud a revisión.</p></div>{!underReview && !loading && !requestError ? <button className="min-h-12 shrink-0 rounded-xl bg-violet-400 px-5 text-sm font-bold text-[#150c2d] hover:bg-violet-300" onClick={() => setShowForm((value) => !value)} type="button">{showForm ? "Cerrar formulario" : "Obtener acceso"}</button> : null}</div>
@@ -153,7 +152,13 @@ function WhatsAppConfirmation({ request }: { request: PaymentRequest }) {
 }
 
 function SubmittedActions({ whatsappUrl }: { whatsappUrl: string | null }) {
-  return <div className={`mt-4 grid gap-3 ${whatsappUrl ? "sm:grid-cols-2" : ""}`}><div className="flex min-h-12 w-full items-center justify-center rounded-xl bg-violet-400/70 px-4 text-sm font-bold text-[#150c2d]" role="status"><span aria-hidden="true">✓ </span>SOLICITUD ENVIADA</div>{whatsappUrl ? <button className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-violet-300/25 bg-violet-400/10 px-4 text-sm font-bold text-violet-100 hover:bg-violet-400/15" onClick={() => openWhatsApp(whatsappUrl)} type="button">ABRIR WHATSAPP <ExternalLink className="h-4 w-4" /></button> : null}</div>;
+  if (!whatsappUrl) return null;
+  return <div className="mt-4 rounded-xl border border-violet-300/15 bg-violet-400/[0.045] p-4"><p className="text-sm leading-6 text-slate-300">¿Querés acelerar la revisión? Avisanos por WhatsApp con tu solicitud ya registrada.</p><button className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-violet-300/25 bg-violet-400/10 px-4 text-sm font-bold text-violet-100 hover:bg-violet-400/15" onClick={() => openWhatsApp(whatsappUrl)} type="button">AVISAR PAGO POR WHATSAPP <ExternalLink className="h-4 w-4" /></button><p className="mt-3 text-xs leading-5 text-slate-500">Avisarnos puede ayudarnos a revisar tu solicitud más rápido, pero la aprobación continúa sujeta a verificación.</p></div>;
+}
+
+function CommunityAction({ url }: { url: string | null }) {
+  if (!url) return null;
+  return <a className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-emerald-300/25 bg-emerald-400/10 px-4 text-sm font-bold text-emerald-100 hover:bg-emerald-400/15" href={url} rel="noreferrer" target="_blank">UNIRME A LA COMUNIDAD <ExternalLink className="h-4 w-4" /></a>;
 }
 
 function CopyPaymentValue({ label, value }: { label: string; value: string }) {
@@ -203,23 +208,9 @@ function openWhatsApp(url: string): void {
   if (opened) opened.opener = null;
 }
 
-function buildWhatsAppUrl(request: PaymentRequest, identity: { email: string; username: string }): string {
-  const message = [
-    `Hola, solicito la verificación de mi acceso Founders a ${PRODUCT_DISPLAY_NAME}.`,
-    `ID de solicitud: ${request.id}`,
-    `Usuario: ${identity.username}`,
-    `Email: ${identity.email}`,
-    `Método: ${methodLabel(request.method)}`,
-    `Importe: ${formatAmount(request.amount)} ${request.currency}`,
-    request.method === "USDT_TRC20" ? `Wallet destino: ${USDT_WALLET}` : null,
-    `Referencia / TXID: ${request.referenceOrTxid}`,
-    `Evidencia cargada en la plataforma: ${request.proof ? "Sí" : "No (opcional para USDT)"}.`,
-  ].filter((line): line is string => Boolean(line)).join("\n");
-  return SUPPORT_WHATSAPP_NUMBER ? `https://wa.me/${SUPPORT_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}` : "";
-}
-
-function formatAmount(value: string): string {
-  return Number(value).toLocaleString("es-AR", { maximumFractionDigits: 8 });
+function buildWhatsAppUrl(request: Pick<PaymentRequest, "id">): string {
+  const supportNumber = configured(import.meta.env.VITE_SUPPORT_WHATSAPP_NUMBER);
+  return supportNumber ? `https://wa.me/${supportNumber}?text=${encodeURIComponent(buildPaymentReviewWhatsAppMessage(request.id))}` : "";
 }
 
 async function copyExactValue(value: string): Promise<void> {

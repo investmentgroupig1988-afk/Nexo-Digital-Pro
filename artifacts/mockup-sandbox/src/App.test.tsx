@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildPaymentReviewWhatsAppMessage } from "@workspace/product";
 
 const api = vi.hoisted(() => ({
   ApiError: class ApiError extends Error {},
@@ -71,6 +72,7 @@ function account(hasAccess: boolean, role: "user" | "admin" = "user") {
       status: hasAccess ? "active" : null,
       grantedAt: hasAccess ? "2026-01-02T00:00:00.000Z" : null,
       expiresAt: null,
+      communityUrl: null as string | null,
     },
   };
 }
@@ -89,7 +91,10 @@ beforeEach(() => {
   Object.defineProperty(window, "open", { configurable: true, value: vi.fn(), writable: true });
 });
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.unstubAllEnvs();
+});
 
 describe("commercial access shell", () => {
   it("shows the public landing when there is no valid session", async () => {
@@ -200,8 +205,9 @@ describe("commercial access shell", () => {
 
   it("requires WhatsApp in the saved request and keeps the support shortcut separate", async () => {
     const request = pendingRequest();
+    const supportUrl = `https://wa.me/5491151550781?text=${encodeURIComponent(buildPaymentReviewWhatsAppMessage(request.id))}`;
     api.getAccount.mockResolvedValue(account(false));
-    api.createPaymentRequest.mockResolvedValue({ request, whatsappUrl: "https://wa.me/5491151550781?text=saved-request" });
+    api.createPaymentRequest.mockResolvedValue({ request, whatsappUrl: supportUrl });
     renderApp();
     fireEvent.click(await screen.findByRole("button", { name: "Obtener acceso" }));
     fireEvent.click(screen.getByRole("button", { name: /USDT TRC20/i }));
@@ -214,10 +220,15 @@ describe("commercial access shell", () => {
     expect(window.open).not.toHaveBeenCalled();
     expect(await screen.findByText("Solicitud enviada / En revisión")).toBeTruthy();
     expect(screen.getByText("Tu solicitud quedó guardada correctamente. Si necesitamos verificar algún dato del pago, podremos contactarte al WhatsApp informado.")).toBeTruthy();
-    const enabledContact = screen.getByRole("button", { name: "ABRIR WHATSAPP" });
+    expect(screen.getByText("¿Querés acelerar la revisión? Avisanos por WhatsApp con tu solicitud ya registrada.")).toBeTruthy();
+    expect(screen.getByText(/la aprobación continúa sujeta a verificación/i)).toBeTruthy();
+    const enabledContact = screen.getByRole("button", { name: "AVISAR PAGO POR WHATSAPP" });
     expect((enabledContact as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(enabledContact);
-    expect(window.open).toHaveBeenCalledWith("https://wa.me/5491151550781?text=saved-request", "_blank", "noopener,noreferrer");
+    expect(window.open).toHaveBeenCalledWith(supportUrl, "_blank", "noopener,noreferrer");
+    const message = new URL(supportUrl).searchParams.get("text") ?? "";
+    expect(message).toContain(request.id);
+    expect(message).not.toMatch(/email|usuario|wallet|txid|referencia|comprobante|password|cookie|token/i);
     expect(api.createPaymentRequest).toHaveBeenCalledTimes(1);
   });
 
@@ -273,10 +284,23 @@ describe("commercial access shell", () => {
     expect(await screen.findByRole("heading", { name: "Solicitud en revisión" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Obtener acceso" })).toBeNull();
     expect(screen.queryByRole("button", { name: "SOLICITUD ENVIADA" })).toBeNull();
-    expect(screen.getByRole("status").textContent).toContain("SOLICITUD ENVIADA");
     expect(screen.queryByRole("button", { name: /WHATSAPP/ })).toBeNull();
     expect(api.createPaymentRequest).not.toHaveBeenCalled();
     expect(window.open).not.toHaveBeenCalled();
+  });
+
+  it("offers the official support CTA for a historical readable request when support is configured", async () => {
+    const request = pendingRequest();
+    vi.stubEnv("VITE_SUPPORT_WHATSAPP_NUMBER", "5491151550781");
+    api.getAccount.mockResolvedValue(account(false));
+    api.getMyPaymentRequests.mockResolvedValue({ requests: [request] });
+    renderApp();
+
+    const contact = await screen.findByRole("button", { name: "AVISAR PAGO POR WHATSAPP" });
+    fireEvent.click(contact);
+    const expectedUrl = `https://wa.me/5491151550781?text=${encodeURIComponent(buildPaymentReviewWhatsAppMessage(request.id))}`;
+    expect(window.open).toHaveBeenCalledWith(expectedUrl, "_blank", "noopener,noreferrer");
+    expect(api.createPaymentRequest).not.toHaveBeenCalled();
   });
 
   it("blocks a new payment request while the saved request status cannot be loaded", async () => {
@@ -321,9 +345,21 @@ describe("commercial access shell", () => {
     api.getAccount.mockResolvedValue(account(true));
     renderApp();
     await screen.findByText("Acceso Founders");
+    expect(screen.queryByRole("link", { name: "UNIRME A LA COMUNIDAD" })).toBeNull();
     fireEvent.click(screen.getByText("Abrir panel privado"));
     expect(await screen.findByText("Panel de análisis con acceso")).toBeTruthy();
     expect(screen.queryByText("Admin")).toBeNull();
+  });
+
+  it("shows the community link only when the entitled account receives a configured URL", async () => {
+    const entitled = account(true);
+    entitled.access.communityUrl = "https://chat.whatsapp.com/example-invite";
+    api.getAccount.mockResolvedValue(entitled);
+    renderApp();
+
+    const community = await screen.findByRole("link", { name: "UNIRME A LA COMUNIDAD" });
+    expect(community.getAttribute("href")).toBe("https://chat.whatsapp.com/example-invite");
+    expect(community.getAttribute("target")).toBe("_blank");
   });
 
   it("only exposes the administration navigation to a reported administrator", async () => {

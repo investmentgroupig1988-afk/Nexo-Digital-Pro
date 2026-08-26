@@ -25,7 +25,7 @@ VITE_LEGAL_TAX_ID=<CUIT oficial>
 VITE_LEGAL_ADDRESS=<domicilio oficial>
 VITE_SUPPORT_EMAIL=<email oficial>
 VITE_LEGAL_EMAIL=<email legal/privacidad oficial>
-VITE_SUPPORT_WHATSAPP_NUMBER=<número oficial para el botón ABRIR WHATSAPP, solo dígitos; no reemplaza el contacto obligatorio de la solicitud>
+VITE_SUPPORT_WHATSAPP_NUMBER=<número oficial para AVISAR PAGO POR WHATSAPP, solo dígitos; no reemplaza el contacto obligatorio de la solicitud>
 ```
 
 4. Hacer **Redeploy** sin reutilizar build cache después de cambiar variables.
@@ -36,7 +36,7 @@ No cargar `DATABASE_URL`, `BETTER_AUTH_SECRET`, `RESEND_API_KEY` ni `TELEGRAM_BO
 
 Crear/usar el environment **staging**, un servicio API separado y un PostgreSQL separado. En el servicio API:
 
-1. **Settings → Source:** repositorio de TRENORO, branch trigger `deploy-ready-v1`.
+1. **Settings → Source:** repositorio de TRENORO, branch trigger `deploy-ready-v1`, automatic deployments **Enabled**.
 2. **Settings → Networking → Custom Domain:** `api-staging.trenoro.com`; copiar literalmente el destino DNS mostrado por Railway.
 3. **Variables:** cargar:
 
@@ -61,7 +61,8 @@ LEGAL_TAX_ID=<CUIT oficial>
 LEGAL_ADDRESS=<domicilio oficial>
 SUPPORT_EMAIL=<email oficial>
 LEGAL_EMAIL=<email legal/privacidad oficial>
-SUPPORT_WHATSAPP_NUMBER=<número oficial para el botón ABRIR WHATSAPP, solo dígitos; no reemplaza el contacto obligatorio de la solicitud>
+SUPPORT_WHATSAPP_NUMBER=<número oficial para AVISAR PAGO POR WHATSAPP, solo dígitos; no reemplaza el contacto obligatorio de la solicitud>
+WHATSAPP_COMMUNITY_URL=<opcional; invitación https://chat.whatsapp.com/...; vacío oculta el botón>
 ```
 
 Los valores entre `<...>` son acciones manuales, no valores para copiar literalmente. Railway debe generar secretos distintos para staging y producción. Después de cargar variables, hacer redeploy y comprobar `/api/healthz`; luego ingresar como admin y revisar `/api/admin/readiness`.
@@ -81,6 +82,8 @@ Cambiar únicamente el flag del frontend no habilita el backend. No hay cotizaci
 
 Railway producción:
 
+Mantener **Settings → Source → branch `main`** y **Automatic Deployments → Disabled** hasta que el lanzamiento sea autorizado. No usar `Deploy Latest Commit`, redeploy ni mergear desde `deploy-ready-v1`.
+
 ```ini
 NODE_ENV=production
 BETTER_AUTH_URL=https://api.trenoro.com
@@ -97,6 +100,7 @@ RESEND_API_KEY=<secreto Resend>
 AUTH_EMAIL_FROM=<remitente verificado>
 TELEGRAM_BOT_TOKEN=<bot producción>
 TELEGRAM_CHAT_ID=<chat producción>
+WHATSAPP_COMMUNITY_URL=<opcional; invitación https://chat.whatsapp.com/...; vacío oculta el botón>
 LEGAL_OPERATOR_NAME=<dato oficial>
 LEGAL_TAX_ID=<dato oficial>
 LEGAL_ADDRESS=<dato oficial>
