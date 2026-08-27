@@ -59,6 +59,7 @@ export type BacktestTrade = BaselineEntry & {
 };
 
 export type BacktestSummary = {
+  frictionBps: number;
   signals: number;
   wins: number;
   losses: number;
@@ -277,17 +278,25 @@ export function evaluateEntries(
   return entries.map((entry) => evaluateEntry(candles, entry, configuration));
 }
 
-export function summarizeBacktest(trades: BacktestTrade[]): BacktestSummary {
+export function summarizeBacktest(trades: BacktestTrade[], frictionBps = 0): BacktestSummary {
+  if (!Number.isFinite(frictionBps) || frictionBps < 0) {
+    throw new Error("Backtest friction must be a non-negative number of basis points.");
+  }
   const completed = trades.filter((trade) => trade.outcome !== "CENSORED");
   const wins = completed.filter((trade) => trade.outcome === "WIN").length;
   const losses = completed.filter((trade) => trade.outcome === "LOSS").length;
   const expired = completed.filter((trade) => trade.outcome === "EXPIRED").length;
   const binary = wins + losses;
-  const realized = completed.map((trade) => trade.realizedR).filter((value): value is number => value !== null);
+  const realized = completed
+    .map((trade) => netRealizedR(trade, frictionBps))
+    .filter((value): value is number => value !== null);
   const positive = realized.filter((value) => value > 0).reduce((sum, value) => sum + value, 0);
   const negative = Math.abs(realized.filter((value) => value < 0).reduce((sum, value) => sum + value, 0));
   const durations = completed.map((trade) => trade.durationCandles).filter((value): value is number => value !== null);
-  const expiredReturns = completed.filter((trade) => trade.outcome === "EXPIRED").map((trade) => trade.realizedR).filter((value): value is number => value !== null);
+  const expiredReturns = completed
+    .filter((trade) => trade.outcome === "EXPIRED")
+    .map((trade) => netRealizedR(trade, frictionBps))
+    .filter((value): value is number => value !== null);
   let equity = 0;
   let peak = 0;
   let maximumDrawdown = 0;
@@ -298,6 +307,7 @@ export function summarizeBacktest(trades: BacktestTrade[]): BacktestSummary {
   }
 
   return {
+    frictionBps,
     signals: completed.length,
     wins,
     losses,
@@ -321,6 +331,17 @@ export function summarizeBacktest(trades: BacktestTrade[]): BacktestSummary {
     medianTargetAtr: median(completed.map((trade) => trade.targetAtr)),
     averageExpiredR: average(expiredReturns),
   };
+}
+
+export function netRealizedR(trade: BacktestTrade, frictionBps: number): number | null {
+  if (trade.realizedR === null) return null;
+  if (!Number.isFinite(frictionBps) || frictionBps < 0) {
+    throw new Error("Backtest friction must be a non-negative number of basis points.");
+  }
+  if (frictionBps === 0) return trade.realizedR;
+  if (!Number.isFinite(trade.riskPct) || trade.riskPct <= 0) return null;
+  // riskPct is expressed in percentage points; one basis point is 0.01 percentage points.
+  return trade.realizedR - (frictionBps / 100) / trade.riskPct;
 }
 
 export function assignPeriod(openedAt: string, start: Date, end: Date): BacktestPeriod {

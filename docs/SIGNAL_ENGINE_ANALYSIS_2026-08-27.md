@@ -37,7 +37,9 @@ All-time accuracy under the requested definition is `0 / 4 = 0%`. This sample is
 - Candidate grids were ranked on TRAIN, selected on DEVELOPMENT, and only reported on VALIDATION/OUT_OF_SAMPLE.
 - Candidates reused the exact baseline entry cohort and changed only exit distance and/or expiry. This isolates exit behavior and does not inflate signal frequency.
 
-`WIN` contributes `+R:R`, `LOSS` contributes `-1R`, and `EXPIRED` contributes its signed mark-to-market result at expiry in initial-risk multiples. Fees, spread, slippage, intra-candle execution ordering beyond the conservative same-candle rule, and leverage are not modeled.
+`WIN` contributes `+R:R`, `LOSS` contributes `-1R`, and `EXPIRED` contributes its signed mark-to-market result at expiry in initial-risk multiples. Same-candle TP/SL ambiguity is resolved as LOSS. Leverage is never modeled or assumed.
+
+Execution friction is reported as sensitivity analysis, not as a claim about a particular exchange or account: ideal `0 bps`, low `14 bps` round trip (8 fee + 2 spread + 4 slippage), and conservative `35 bps` (20 + 5 + 10). Cost is converted to R independently for every trade from that trade's entry-to-stop percentage.
 
 ## Baseline result
 
@@ -111,6 +113,64 @@ All experimental candidates convert many expirations into settled outcomes, but 
 
 The baseline currently emits only R:R 1.5 entries, so the requested R:R buckets above 1.75 contain no observations. There is no empirical basis in this dataset for changing the 1.5 minimum.
 
+## Bounded per-timeframe geometry study
+
+A second, deliberately limited grid tested seven volatility-normalized stops (`1`, `1.25`, `1.5`, `1.75`, `2`, `2.5`, and `3 ATR`) against three reward/risk ratios (`1.5`, `1.75`, and `2`), always with the live 12-candle expiry. This is 21 candidates per timeframe, not an unbounded optimizer. Entries, filters, scoring, frequency, and expiry remained frozen.
+
+Candidates were ranked independently per timeframe using only TRAIN and DEVELOPMENT. The ranking maximized the worse of their conservative-friction expectancies, with average expectancy, profit factor, and drawdown as tie-breakers. VALIDATION and OUT_OF_SAMPLE remained sealed until a candidate had been selected. A candidate still had to pass every promotion gate; being the least-bad grid member did not make it deployable.
+
+### Best exploratory candidate by timeframe
+
+| TF | SL | TP | R:R | OOS signals | OOS WIN / LOSS / EXPIRED | OOS EXPIRED | OOS expectancy | OOS PF | OOS DD |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 5m | 3 ATR | 5.25 ATR | 1.75 | 249 | 28 / 54 / 167 | 67.07% | +0.0423 R | 1.1327 | 9.78 R |
+| 15m | 3 ATR | 6 ATR | 2.0 | 82 | 4 / 22 / 56 | 68.29% | -0.0757 R | 0.8058 | 12.28 R |
+| 1h | 3 ATR | 6 ATR | 2.0 | 21 | 0 / 6 / 15 | 71.43% | -0.2239 R | 0.4025 | 6.29 R |
+| 4h | — | — | — | — | — | — | — | — | — |
+
+The 4h TRAIN/DEVELOPMENT sample did not satisfy the predeclared minimum (30/12), so no 4h candidate was selected.
+
+### Baseline versus selected candidate, untouched OOS
+
+| TF | Variant | WIN | LOSS | EXPIRED | EXPIRED % | Expectancy | PF | DD |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 5m | Baseline | 20 | 35 | 194 | 77.91% | +0.0085 R | 1.0322 | 9.70 R |
+| 5m | 3 ATR / 5.25 ATR | 28 | 54 | 167 | 67.07% | +0.0423 R | 1.1327 | 9.78 R |
+| 15m | Baseline | 10 | 20 | 52 | 63.41% | -0.0652 R | 0.8157 | 11.25 R |
+| 15m | 3 ATR / 6 ATR | 4 | 22 | 56 | 68.29% | -0.0757 R | 0.8058 | 12.28 R |
+| 1h | Baseline | 1 | 5 | 15 | 71.43% | -0.1774 R | 0.4962 | 5.22 R |
+| 1h | 3 ATR / 6 ATR | 0 | 6 | 15 | 71.43% | -0.2239 R | 0.4025 | 6.29 R |
+| 4h | Baseline only | 0 | 0 | 1 | 100% | -0.2422 R | 0 | 0.24 R |
+
+The 5m candidate is directionally interesting only before costs: 27 fewer expirations became eight additional wins and 19 additional losses. It slightly improves ideal OOS expectancy and PF without materially changing OOS drawdown, but TRAIN and DEVELOPMENT are both negative even before friction. The other timeframes do not improve OOS.
+
+### Robustness across chronological partitions (ideal execution)
+
+| TF candidate | TRAIN expectancy | DEVELOPMENT | VALIDATION | OOS | Stable? |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 5m: 3 ATR / 5.25 ATR | -0.0098 R | -0.0143 R | +0.1046 R | +0.0423 R | NO |
+| 15m: 3 ATR / 6 ATR | +0.0630 R | +0.0384 R | -0.0195 R | -0.0757 R | NO |
+| 1h: 3 ATR / 6 ATR | +0.0742 R | -0.0718 R | +0.0701 R | -0.2239 R | NO |
+| 4h | insufficient sample | insufficient sample | insufficient sample | insufficient sample | NO |
+
+### Fees, spread, and slippage sensitivity
+
+| Variant / OOS | Ideal expectancy / PF | Low 14 bps expectancy / PF | Conservative 35 bps expectancy / PF |
+| --- | ---: | ---: | ---: |
+| Baseline, all TF | -0.0204 / 0.9300 | -0.3880 / 0.2913 | -0.9394 / 0.0756 |
+| Selected per-TF mix | -0.0017 / 0.9948 | -0.4581 / 0.2957 | -1.1426 / 0.0694 |
+| 5m selected | +0.0423 / 1.1327 | -0.5003 / 0.2751 | -1.3142 / 0.0490 |
+| 15m selected | -0.0757 / 0.8058 | -0.3594 / 0.3809 | -0.7850 / 0.1513 |
+| 1h selected | -0.2239 / 0.4025 | -0.3514 / 0.2528 | -0.5426 / 0.1337 |
+
+No candidate survives the low-friction scenario. Because stops are a small fraction of BTC price, even modest notional round-trip costs consume a material fraction of one R. Exact costs will vary by venue and execution, but a candidate that needs zero-cost execution is not suitable for live promotion.
+
+## Special 5m excursion evidence
+
+For the baseline 5m cohort, median stop and target are `3.93 ATR` and `5.90 ATR`. MFE percentiles are `0.60 ATR` (p25), `1.58 ATR` (p50), `2.99 ATR` (p75), and `5.07 ATR` (p90). MAE percentiles are `0.80`, `1.68`, `2.67`, and `3.83 ATR` respectively. A baseline WIN reaches TP in a median seven candles; a LOSS reaches SL in a median seven candles. Baseline EXPIRED signals have median MFE `1.61 ATR`, median MAE `1.53 ATR`, and remain unresolved for all 12 candles.
+
+This confirms the descriptive hypothesis that most 5m targets are far beyond ordinary within-horizon movement. It does **not** validate moving them closer live: the selected bounded-grid geometry still targets `5.25 ATR`, converts many expirations into losses, is negative on TRAIN/DEVELOPMENT, and fails after modeled friction. More aggressive reductions ranked worse before OOS was opened.
+
 ## Findings
 
 - **Are current targets too ambitious? YES, relative to the current horizon.** Their ATR scale is far above observed median favorable excursion. Reducing them alone is nevertheless not supported by out-of-sample results.
@@ -126,10 +186,28 @@ Recommended candidate: **BASELINE / KEEP**. No experimental exit configuration i
 
 The live historical-data adapter and the offline runner now share the same inclusive close-time predicate: a kline is eligible only when its provider `closeTime` is less than or equal to the observation cutoff. Live BTCUSDT fetches use Binance server time, request one additional kline when possible, remove every still-forming kline, and then retain the requested number of most recent closed candles. No strategy parameter was changed.
 
+### PRE-FIX versus CLOSED-CANDLE baseline
+
+The baseline was rerun after the live fix with the exact original cutoff and `--baseline-only`, so no candidate grid executed. The pre-fix research runner already excluded `row.closeTime > observedAt`; the fix replaced that local comparison with the same shared predicate now enforced by the live adapter. Consequently the reproducible research baseline is invariant, as expected:
+
+| Period | Variant | Signals | WIN | LOSS | EXPIRED | Expectancy | PF | DD |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Full | PRE-FIX BASELINE | 2,259 | 234 | 341 | 1,684 | +0.014012 R | 1.050509 | 18.701155 R |
+| Full | CLOSED-CANDLE BASELINE | 2,259 | 234 | 341 | 1,684 | +0.014012 R | 1.050509 | 18.701155 R |
+| TRAIN | PRE / POST | 1,083 | 116 | 170 | 797 | +0.012199 R | 1.043404 | 18.701155 R |
+| DEVELOPMENT | PRE / POST | 467 | 47 | 67 | 353 | -0.002280 R | 0.992002 | 16.537034 R |
+| VALIDATION | PRE / POST | 356 | 40 | 44 | 272 | +0.074979 R | 1.308585 | 6.965515 R |
+| OOS | PRE / POST | 353 | 31 | 60 | 262 | -0.020355 R | 0.930044 | 12.436825 R |
+
+Every measured delta is zero. This is not evidence that a forming candle could never have changed a live decision; historical final OHLC does not contain the sequence of partial intrabar snapshots needed to reconstruct that counterfactual without fabrication. It demonstrates that the fix changes only the live input-validity boundary and leaves the closed-candle strategy baseline unchanged.
+
 ## Reproduction
 
 ```bash
 corepack pnpm run analyze:signals -- --days=365 --end=2026-08-27T07:29:46.257Z --terse
+corepack pnpm run analyze:signals -- --days=365 --end=2026-08-27T07:29:46.257Z --baseline-only
+corepack pnpm run analyze:signals -- --days=365 --end=2026-08-27T07:29:46.257Z --geometry
+corepack pnpm run analyze:signals -- --days=365 --end=2026-08-27T07:29:46.257Z --selection
 ```
 
 The implementation and methodological caveats are documented in `docs/SIGNAL_ENGINE_ANALYSIS.md`.

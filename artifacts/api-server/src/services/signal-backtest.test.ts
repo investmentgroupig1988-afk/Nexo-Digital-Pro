@@ -72,6 +72,22 @@ test("summary treats expired as part of total accuracy and economic expectancy",
   assert.ok(Math.abs((summary.expectancyR ?? 0) - (1.5 + 0.5 - 1) / 3) < 1e-12);
 });
 
+test("summary deducts round-trip friction in R without changing outcomes", () => {
+  const win = evaluateEntry(series([[100, 101, 99, 100], [100, 115, 99, 114], [114, 116, 110, 115]]), entry(), configuration);
+  const loss = evaluateEntry(series([[100, 101, 99, 100], [100, 105, 89, 90], [90, 92, 88, 91]]), entry(), configuration);
+  const summary = summarizeBacktest([win, loss], 25);
+  // Each trade risks 10% of entry. 25 bps (0.25%) therefore costs 0.025 R per trade.
+  assert.equal(summary.frictionBps, 25);
+  assert.equal(summary.wins, 1);
+  assert.equal(summary.losses, 1);
+  assert.ok(Math.abs((summary.expectancyR ?? 0) - 0.225) < 1e-12);
+  assert.ok(Math.abs((summary.profitFactor ?? 0) - 1.475 / 1.025) < 1e-12);
+});
+
+test("summary rejects invalid friction assumptions", () => {
+  assert.throws(() => summarizeBacktest([], -1), /non-negative/);
+});
+
 test("candle quality identifies gaps, duplicates and incomplete data", () => {
   const candles = series([[100, 101, 99, 100], [100, 101, 99, 100], [100, 101, 99, 100]]);
   candles[1] = { ...candles[1], timestamp: candles[0].timestamp, closeTime: candles[0].closeTime };
