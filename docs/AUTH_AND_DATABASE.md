@@ -19,13 +19,15 @@ El backend vuelve a verificar sesión, estado de bloqueo, permiso y access grant
 | Ruta | Protección |
 | --- | --- |
 | `POST /api/auth/register`, `POST /api/auth/login` | Pública con rate limit de auth |
+| `POST /api/auth/request-password-reset`, `POST /api/auth/reset-password` | Pública con rate limit de auth, respuesta no enumerativa y token de un solo uso |
+| `POST /api/auth/send-verification`, `GET /api/auth/verify-email` | Solicitud protegida por rate limit y verificación mediante token firmado con expiración |
 | `POST /api/auth/logout`, `GET /api/me`, `GET /api/access/me` | Sesión válida |
 | `GET /api/market`, `/api/candles`, `/api/indicators` | Sesión + access grant activo |
 | `GET /api/admin/users`, `/:id`, `/audit` | Permiso admin correspondiente |
 | `POST /api/admin/users/:id/grant-access`, `revoke-access`, `restore-access` | `access.grant` / `access.revoke` |
 | `POST /api/admin/users/:id/block`, `unblock`, `role` | `users.block` / `admins.manage` |
 
-La recuperación de contraseña y verificación de email están preparadas pero devuelven `501` hasta que se configure un proveedor de correo. No se integró OAuth ni cobro real.
+La recuperación de contraseña y la verificación de email están implementadas y operativas mediante Better Auth y el adapter de Resend. Los enlaces usan tokens con expiración; el reset es de un solo uso, responde de forma genérica para no enumerar cuentas y revoca las sesiones existentes cuando se completa. El envío requiere `RESEND_API_KEY`, `AUTH_EMAIL_FROM` y `APP_PUBLIC_URL` configurados en el backend. No se integró OAuth ni un procesador de cobro automático: las solicitudes de pago continúan sujetas a verificación administrativa.
 
 ## Railway staging: pasos exactos
 

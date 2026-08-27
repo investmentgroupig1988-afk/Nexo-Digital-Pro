@@ -100,6 +100,7 @@ RESEND_API_KEY=<secreto Resend>
 AUTH_EMAIL_FROM=<remitente verificado>
 TELEGRAM_BOT_TOKEN=<bot producción>
 TELEGRAM_CHAT_ID=<chat producción>
+SUPPORT_WHATSAPP_NUMBER=<número oficial para soporte y AVISAR PAGO POR WHATSAPP, solo dígitos; no reemplaza el contacto obligatorio de la solicitud>
 WHATSAPP_COMMUNITY_URL=<opcional; invitación https://chat.whatsapp.com/...; vacío oculta el botón>
 LEGAL_OPERATOR_NAME=<dato oficial>
 LEGAL_TAX_ID=<dato oficial>
@@ -118,6 +119,7 @@ VITE_LEGAL_TAX_ID=<dato oficial>
 VITE_LEGAL_ADDRESS=<dato oficial>
 VITE_SUPPORT_EMAIL=<dato oficial>
 VITE_LEGAL_EMAIL=<dato oficial>
+VITE_SUPPORT_WHATSAPP_NUMBER=<número oficial para el footer global y AVISAR PAGO POR WHATSAPP, solo dígitos; copia pública de SUPPORT_WHATSAPP_NUMBER>
 ```
 
 No hacer cutover hasta que staging, email, Telegram, migraciones y readiness admin estén validados.

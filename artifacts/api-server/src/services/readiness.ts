@@ -5,6 +5,11 @@ import { isEmailDeliveryConfigured } from "./email";
 import { getSignalEngineHealth } from "./signal-refresh";
 
 type CheckStatus = "OK" | "ERROR" | "INCOMPLETE" | "STARTING" | "STALE";
+type TopologyStatus = Extract<CheckStatus, "OK" | "ERROR" | "INCOMPLETE">;
+
+export function topologyReleaseBlocker(status: TopologyStatus): "ENVIRONMENT_TOPOLOGY" | null {
+  return status === "OK" ? null : "ENVIRONMENT_TOPOLOGY";
+}
 
 export async function getAdminReadiness() {
   let database: "OK" | "ERROR" = "OK";
@@ -35,7 +40,7 @@ export async function getAdminReadiness() {
     scheduler !== "OK" ? "SIGNAL_SCHEDULER" : null,
     marketProvider !== "OK" ? "MARKET_PROVIDER" : null,
     missingLegal.length ? "LEGAL_CONFIG" : null,
-    topology.status === "ERROR" ? "ENVIRONMENT_TOPOLOGY" : null,
+    topologyReleaseBlocker(topology.status),
   ].filter((value): value is string => Boolean(value));
 
   return {
