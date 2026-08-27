@@ -7,6 +7,7 @@ import {
   type HistoricalTimeframe,
 } from "./historical";
 import { evaluateSignal } from "./signal-engine";
+import { calculateTechnicalAnalysis } from "./technical";
 import type { TechnicalAnalysisResult } from "./technical";
 
 const TIMEFRAME_MS: Record<Exclude<HistoricalTimeframe, "1m">, number> = {
@@ -61,6 +62,22 @@ test("removing a forming candle preserves the evaluated signal fingerprint", () 
   assert.equal(repeated.outcome, "LONG");
   assert.equal(repeated.configurationFingerprint, first.configurationFingerprint);
   assert.equal(repeated.openedAt.toISOString(), first.openedAt.toISOString());
+});
+
+test("too few closed candles after filtering fails safely with NO_SIGNAL", () => {
+  const intervalMs = TIMEFRAME_MS["5m"];
+  const start = Date.UTC(2026, 7, 26, 0);
+  const closedRaw = Array.from({ length: 199 }, (_, index) => kline(start + intervalMs * index, intervalMs, 99));
+  const forming = kline(start + intervalMs * 199, intervalMs, 130);
+  const observedAt = closedRaw.at(-1)![6];
+  const selected = selectClosedBinanceCandles([...closedRaw, forming], observedAt, 200);
+  const technical = calculateTechnicalAnalysis(selected, "binance");
+  const result = evaluateSignal({ symbol: "BTCUSDT", timeframe: "5m", candles: selected, technical });
+
+  assert.equal(selected.length, 199);
+  assert.equal(technical.status, "INSUFFICIENT_DATA");
+  assert.equal(result.outcome, "NO_SIGNAL");
+  if (result.outcome === "NO_SIGNAL") assert.equal(result.reason, "insufficient_data");
 });
 
 function kline(openTime: number, intervalMs: number, close: number): BinanceKline {
