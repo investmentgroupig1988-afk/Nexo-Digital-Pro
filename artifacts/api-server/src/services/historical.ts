@@ -10,6 +10,7 @@ const CACHE_TTL_MS = 20_000;
 
 export type HistoricalCandle = {
   timestamp: string;
+  closeTime?: string;
   open: number;
   high: number;
   low: number;
@@ -57,7 +58,7 @@ export class HistoricalDataError extends Error {
   }
 }
 
-type BinanceKline = [
+export type BinanceKline = [
   number,
   string,
   string,
@@ -72,6 +73,9 @@ type BinanceKline = [
   string,
 ];
 
+type BinanceHistoricalCandle = HistoricalCandle & { closeTime: string };
+type BinanceServerTime = { serverTime: number };
+
 const cache = new Map<
   string,
   { expiresAt: number; result: Extract<HistoricalDataResult, { status: "OK" }> }
@@ -80,6 +84,7 @@ const inFlight = new Map<
   string,
   Promise<Extract<HistoricalDataResult, { status: "OK" }>>
 >();
+let binanceServerTimeInFlight: Promise<number> | undefined;
 
 export function parseHistoricalTimeframe(value: string | undefined): HistoricalTimeframe {
   const timeframe = value?.trim() || "15m";
@@ -109,11 +114,13 @@ export function parseHistoricalLimit(value: string | undefined): number {
   return limit;
 }
 
-function normalizeBinanceCandle(kline: BinanceKline): HistoricalCandle {
-  const [timestamp, open, high, low, close, volume] = kline;
+function normalizeBinanceCandle(kline: BinanceKline): BinanceHistoricalCandle {
+  const [timestamp, open, high, low, close, volume, closeTime] = kline;
   const values = [Number(open), Number(high), Number(low), Number(close), Number(volume)];
   if (
     !Number.isFinite(timestamp) ||
+    !Number.isFinite(closeTime) ||
+    closeTime < timestamp ||
     values.some((value) => !Number.isFinite(value)) ||
     values.slice(0, 4).some((value) => value <= 0) ||
     values[4] < 0
@@ -123,6 +130,7 @@ function normalizeBinanceCandle(kline: BinanceKline): HistoricalCandle {
 
   return {
     timestamp: new Date(timestamp).toISOString(),
+    closeTime: new Date(closeTime).toISOString(),
     open: values[0],
     high: values[1],
     low: values[2],
@@ -131,21 +139,75 @@ function normalizeBinanceCandle(kline: BinanceKline): HistoricalCandle {
   };
 }
 
+type TimeInput = Date | number | string;
+
+export function isCandleClosedAt(closeTime: TimeInput, observedAt: TimeInput): boolean {
+  const closeTimeMs = toEpochMilliseconds(closeTime);
+  const observedAtMs = toEpochMilliseconds(observedAt);
+  return closeTimeMs !== null && observedAtMs !== null && closeTimeMs <= observedAtMs;
+}
+
+export function selectClosedHistoricalCandles<T extends HistoricalCandle & { closeTime: string }>(
+  candles: T[],
+  observedAt: TimeInput,
+  limit = candles.length,
+): T[] {
+  if (toEpochMilliseconds(observedAt) === null) {
+    throw new HistoricalDataError("Invalid market-data observation time.");
+  }
+  return candles.filter((candle) => isCandleClosedAt(candle.closeTime, observedAt)).slice(-limit);
+}
+
+export function selectClosedBinanceCandles(
+  rawCandles: BinanceKline[],
+  observedAt: TimeInput,
+  limit: number,
+): BinanceHistoricalCandle[] {
+  return selectClosedHistoricalCandles(rawCandles.map(normalizeBinanceCandle), observedAt, limit);
+}
+
+function toEpochMilliseconds(value: TimeInput): number | null {
+  const milliseconds = value instanceof Date
+    ? value.getTime()
+    : typeof value === "string"
+      ? Date.parse(value)
+      : value;
+  return Number.isFinite(milliseconds) ? milliseconds : null;
+}
+
+async function getBinanceServerTime(): Promise<number> {
+  if (binanceServerTimeInFlight) return binanceServerTimeInFlight;
+  const request = getBinance<BinanceServerTime>("/time", {}).then((result) => {
+    if (!Number.isFinite(result.serverTime)) {
+      throw new HistoricalDataError("Binance returned an invalid server time.");
+    }
+    return result.serverTime;
+  }).finally(() => {
+    binanceServerTimeInFlight = undefined;
+  });
+  binanceServerTimeInFlight = request;
+  return request;
+}
+
 async function fetchBitcoinCandles(
   timeframe: HistoricalTimeframe,
   limit: number,
 ): Promise<Extract<HistoricalDataResult, { status: "OK" }>> {
+  const observedAt = await getBinanceServerTime();
   const rawCandles = await getBinance<BinanceKline[]>("/klines", {
     symbol: "BTCUSDT",
     interval: timeframe,
-    limit,
+    limit: Math.min(limit + 1, MAX_LIMIT),
   });
 
   if (!Array.isArray(rawCandles) || rawCandles.length === 0) {
     throw new HistoricalDataError("Binance returned no historical candles.");
   }
 
-  const candles = rawCandles.map(normalizeBinanceCandle);
+  const candles = selectClosedBinanceCandles(rawCandles, observedAt, limit);
+  if (candles.length === 0) {
+    throw new HistoricalDataError("Binance returned no closed historical candles.");
+  }
   return {
     status: "OK",
     symbol: "BTCUSDT",

@@ -122,9 +122,9 @@ The baseline currently emits only R:R 1.5 entries, so the requested R:R buckets 
 
 Recommended candidate: **BASELINE / KEEP**. No experimental exit configuration is suitable for promotion.
 
-## Correctness issue for a later round
+## Closed-candle correction
 
-The offline runner explicitly excludes an exchange kline whose close time is after the observation cutoff. The current live historical-data adapter maps the most recent REST klines without an equivalent close-time exclusion, so a scan can evaluate a still-forming candle. This is a high-priority correctness issue because it can make a close-based strategy depend on unconfirmed prices. It was not changed in this analysis-only round because doing so changes live signal behavior and requires separate authorization and staging validation.
+The live historical-data adapter and the offline runner now share the same inclusive close-time predicate: a kline is eligible only when its provider `closeTime` is less than or equal to the observation cutoff. Live BTCUSDT fetches use Binance server time, request one additional kline when possible, remove every still-forming kline, and then retain the requested number of most recent closed candles. No strategy parameter was changed.
 
 ## Reproduction
 

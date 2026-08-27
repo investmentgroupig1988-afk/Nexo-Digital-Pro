@@ -15,7 +15,7 @@ import {
   type ExitConfiguration,
 } from "../services/signal-backtest";
 import { COMMERCIAL_SIGNAL_TIMEFRAMES } from "../services/signal-engine";
-import type { HistoricalTimeframe } from "../services/historical";
+import { isCandleClosedAt, type HistoricalTimeframe } from "../services/historical";
 
 type BinanceKline = [number, string, string, string, string, string, number, string, number, string, string, string];
 type ServerTime = { serverTime: number };
@@ -374,7 +374,7 @@ async function fetchClosedCandles(
     });
     if (!page.length) break;
     for (const row of page) {
-      if (row[6] > observedAt.getTime()) {
+      if (!isCandleClosedAt(row[6], observedAt)) {
         incompleteExcluded += 1;
         continue;
       }
