@@ -16,6 +16,14 @@ import {
 } from "../services/signal-backtest";
 import { COMMERCIAL_SIGNAL_TIMEFRAMES } from "../services/signal-engine";
 import { isCandleClosedAt, type HistoricalTimeframe } from "../services/historical";
+import { calculateTechnicalAnalysis } from "../services/technical";
+import {
+  buildRobustGeometryGrid,
+  passesOfflineFilter,
+  selectCandidateBeforeOos,
+  type OfflineFilterName,
+  type OfflineFilterThresholds,
+} from "../services/signal-candidate-study";
 
 type BinanceKline = [number, string, string, string, string, string, number, string, number, string, string, string];
 type ServerTime = { serverTime: number };
@@ -32,6 +40,13 @@ type FrictionScenario = {
   spreadBps: number;
   slippageBps: number;
   note: string;
+};
+type RobustFamily = "BASELINE" | "ATR" | "PERCENT" | "ATR_STRUCTURE_HYBRID";
+type RobustCandidate = {
+  id: string;
+  family: RobustFamily;
+  filter: OfflineFilterName;
+  configuration: ExitConfiguration;
 };
 type GeometrySelection = {
   selected: ExitConfiguration | null;
@@ -108,6 +123,14 @@ const MINIMUM_SELECTION_SAMPLE = 8;
 const GEOMETRY_TRAIN_MINIMUM = 30;
 const GEOMETRY_DEVELOPMENT_MINIMUM = 12;
 const GEOMETRY_OOS_MINIMUM = 20;
+const ROBUST_FILTERS: OfflineFilterName[] = [
+  "NONE",
+  "VOLUME_1_10",
+  "MTF_2",
+  "NORMAL_VOLATILITY",
+  "STRUCTURE_COMPATIBLE",
+  "QUALITY_COMBINED",
+];
 const GEOMETRY_STOP_ATR = [1, 1.25, 1.5, 1.75, 2, 2.5, 3] as const;
 const GEOMETRY_REWARD_RISK = [1.5, 1.75, 2] as const;
 const FRICTION_SCENARIOS: Record<FrictionScenarioName, FrictionScenario> = {
@@ -150,6 +173,19 @@ const entries = Object.fromEntries(COMMERCIAL_SIGNAL_TIMEFRAMES.map((timeframe) 
 ])) as EntryMap;
 
 const baseline = evaluateAcrossTimeframes(entries, fetched, () => baselineConfiguration());
+if (options.robust) {
+  enrichEntriesWithClosedMtfContext(entries, fetched);
+  const robustStudy = buildRobustCandidateStudy(
+    entries,
+    fetched,
+    baseline,
+    analysisStart,
+    observedAt,
+    options.days,
+  );
+  console.log(JSON.stringify(roundDeep(options.terse ? robustStudySummary(robustStudy) : robustStudy), null, 2));
+  process.exit(0);
+}
 if (options.baselineOnly) {
   console.log(JSON.stringify(roundDeep({
     metadata: {
@@ -354,6 +390,359 @@ function evaluateAcrossTimeframes(
     timeframe,
     evaluateEntries(data[timeframe].candles, cohort[timeframe], configuration(timeframe)),
   ])) as TradeMap;
+}
+
+function buildRobustCandidateStudy(
+  cohort: EntryMap,
+  data: Record<HistoricalTimeframe, TimeframeData>,
+  baselineTrades: TradeMap,
+  start: Date,
+  end: Date,
+  days: number,
+) {
+  const selectedTrades = {} as Record<CommercialTimeframe, BacktestTrade[]>;
+  const byTimeframe = Object.fromEntries(COMMERCIAL_SIGNAL_TIMEFRAMES.map((timeframe) => {
+    const thresholds = trainingThresholds(cohort[timeframe], start, end);
+    const candidates = robustCandidates(timeframe, thresholds);
+    const evaluated = candidates.map((candidate) => {
+      const trades = filteredCandidateTrades(data[timeframe].candles, cohort[timeframe], candidate, thresholds);
+      return {
+        candidate,
+        train: summaryForTradePeriod(trades, "TRAIN", start, end, FRICTION_SCENARIOS.conservative.totalBps),
+        development: summaryForTradePeriod(trades, "DEVELOPMENT", start, end, FRICTION_SCENARIOS.conservative.totalBps),
+        validation: summaryForTradePeriod(trades, "VALIDATION", start, end, FRICTION_SCENARIOS.conservative.totalBps),
+      };
+    });
+    const benchmarkWinner = selectCandidateBeforeOos(evaluated);
+    const selected = selectCandidateBeforeOos(evaluated.filter(({ candidate }) => candidate.family !== "BASELINE"));
+    const baselineOos = frictionForPeriod(baselineTrades[timeframe], "OUT_OF_SAMPLE", start, end);
+    if (!selected) {
+      selectedTrades[timeframe] = [];
+      return [timeframe, {
+        trainThresholds: thresholds,
+        candidateCount: candidates.length,
+        selected: null,
+        benchmarkWinner: benchmarkWinner?.candidate ?? null,
+        reason: "Insufficient TRAIN/DEVELOPMENT/VALIDATION sample for pre-OOS selection.",
+        baseline: {
+          overall: summarizeBacktest(baselineTrades[timeframe]),
+          oosFriction: baselineOos,
+        },
+      }];
+    }
+
+    const candidate = selected.candidate;
+    const trades = filteredCandidateTrades(data[timeframe].candles, cohort[timeframe], candidate, thresholds);
+    selectedTrades[timeframe] = trades;
+    const periodsIdeal = Object.fromEntries(PERIODS.map((period) => [
+      period,
+      summaryForTradePeriod(trades, period, start, end),
+    ])) as Record<BacktestPeriod, BacktestSummary>;
+    const oosFriction = frictionForPeriod(trades, "OUT_OF_SAMPLE", start, end);
+    const baselineOosConservative = baselineOos.conservative;
+    const candidateOosConservative = oosFriction.conservative;
+    const preOosSummaries = [selected.train, selected.development, selected.validation];
+    const promotionChecks = {
+      positiveAndProfitableAcrossPreOosAfterConservativeFriction: preOosSummaries.every((summary) =>
+        (summary.expectancyR ?? Number.NEGATIVE_INFINITY) > 0 && (summary.profitFactor ?? 0) > 1),
+      positiveOosAfterConservativeFriction:
+        (candidateOosConservative.expectancyR ?? Number.NEGATIVE_INFINITY) > 0
+        && (candidateOosConservative.profitFactor ?? 0) > 1,
+      sufficientOosSample: candidateOosConservative.signals >= GEOMETRY_OOS_MINIMUM,
+      drawdownControlled:
+        candidateOosConservative.maximumDrawdownR !== null
+        && baselineOosConservative.maximumDrawdownR !== null
+        && candidateOosConservative.maximumDrawdownR <= baselineOosConservative.maximumDrawdownR * 1.25,
+      expiredRateMateriallyLower:
+        candidateOosConservative.expiredRate !== null
+        && baselineOosConservative.expiredRate !== null
+        && candidateOosConservative.expiredRate <= baselineOosConservative.expiredRate - 10,
+      lossRateNotWorse:
+        candidateOosConservative.lossRate !== null
+        && baselineOosConservative.lossRate !== null
+        && candidateOosConservative.lossRate <= baselineOosConservative.lossRate + 2,
+      frequencyNotIncreased: trades.length <= baselineTrades[timeframe].length,
+    };
+    return [timeframe, {
+      trainThresholds: thresholds,
+      candidateCount: candidates.length,
+      selected: candidate,
+      benchmarkWinner: benchmarkWinner?.candidate ?? null,
+      selectionEvidenceConservative: {
+        train: selected.train,
+        development: selected.development,
+        validation: selected.validation,
+      },
+      baseline: {
+        overall: summarizeBacktest(baselineTrades[timeframe]),
+        periods: Object.fromEntries(PERIODS.map((period) => [
+          period,
+          summaryForTradePeriod(baselineTrades[timeframe], period, start, end),
+        ])),
+        oosFriction: baselineOos,
+      },
+      candidate: {
+        overall: summarizeBacktest(trades),
+        periods: periodsIdeal,
+        oosFriction,
+      },
+      promotionChecks,
+      shadowEligible: Object.values(promotionChecks).every(Boolean),
+    }];
+  })) as Record<CommercialTimeframe, Record<string, unknown>>;
+
+  const allBaseline = COMMERCIAL_SIGNAL_TIMEFRAMES.flatMap((timeframe) => baselineTrades[timeframe]);
+  const allSelected = COMMERCIAL_SIGNAL_TIMEFRAMES.flatMap((timeframe) => selectedTrades[timeframe]);
+  return {
+    metadata: {
+      provider: "Binance public Spot klines",
+      symbol: "BTCUSDT",
+      analysisStart: start.toISOString(),
+      analysisEnd: end.toISOString(),
+      days,
+      liveStrategyChanged: false,
+      databaseWrites: false,
+      historyWrites: false,
+      telegramCalls: false,
+      fixedEntryCohort: "All candidates reuse baseline entries; filters can remove but never add entries.",
+      candlePolicy: "Every feature uses only candles whose provider closeTime is at or before the decision time.",
+      partitions: "Chronological 50% TRAIN / 20% DEVELOPMENT / 15% VALIDATION / 15% sealed OUT_OF_SAMPLE.",
+      selection: "Worst-period conservative-friction expectancy across TRAIN/DEVELOPMENT/VALIDATION, then average expectancy, PF and drawdown. OOS is evaluated only after selection.",
+      geometry: {
+        stopAtr: [0.75, 1, 1.25, 1.5, 2],
+        targetAtr: [1.25, 1.5, 1.75, 2, 2.5, 3],
+        minimumRewardRisk: 1.5,
+        validPairs: buildRobustGeometryGrid().length,
+        expiryCandlesChanged: false,
+      },
+      families: {
+        ATR: "Stop/target scale with ATR at entry.",
+        PERCENT: "Price percentage is calibrated from TRAIN median ATR percentage, then frozen for DEV/VALIDATION/OOS.",
+        ATR_STRUCTURE_HYBRID: "The live structural/ATR stop is capped by the candidate ATR distance; optional filters require stop and target compatibility with entry-time support/resistance.",
+      },
+      filters: {
+        VOLUME_1_10: "Entry-time volume ratio >= 1.10.",
+        MTF_2: "At least two closed-candle timeframes agree with direction.",
+        NORMAL_VOLATILITY: "Entry ATR percentage lies within TRAIN p20-p80 for that timeframe.",
+        STRUCTURE_COMPATIBLE: "Stop reaches supporting structure and target does not sit beyond the nearest entry-time obstacle.",
+        QUALITY_COMBINED: "All four entry-time filters pass.",
+      },
+      scoreAudit: "No numeric score exists in the live strategy; entries are Boolean confluence gates. This study does not invent one.",
+      frictionScenarios: FRICTION_SCENARIOS,
+    },
+    dataQuality: Object.fromEntries(COMMERCIAL_SIGNAL_TIMEFRAMES.map((timeframe) => [timeframe, {
+      ...validateCandleSeries(data[timeframe].candles, INTERVAL_MS[timeframe], end),
+      incompleteExcluded: data[timeframe].incompleteExcluded,
+    }])),
+    baseline: {
+      overall: summarizeBacktest(allBaseline),
+      oosFriction: frictionForPeriod(allBaseline, "OUT_OF_SAMPLE", start, end),
+    },
+    selectedCombined: {
+      overall: summarizeBacktest(allSelected),
+      oosFriction: frictionForPeriod(allSelected, "OUT_OF_SAMPLE", start, end),
+    },
+    byTimeframe,
+  };
+}
+
+function robustCandidates(timeframe: CommercialTimeframe, thresholds: OfflineFilterThresholds): RobustCandidate[] {
+  const medianAtrPct = thresholds.atrPctMedian;
+  const candidates: RobustCandidate[] = [];
+  for (const filter of ROBUST_FILTERS) {
+    candidates.push({
+      id: `BASELINE_${filter}`,
+      family: "BASELINE",
+      filter,
+      configuration: { ...baselineConfiguration(), name: `BASELINE_${filter}` },
+    });
+  }
+  for (const geometry of buildRobustGeometryGrid()) {
+    for (const filter of ROBUST_FILTERS) {
+      const suffix = `S${geometry.stopAtr}_T${geometry.targetAtr}_${filter}`;
+      candidates.push({
+        id: `ATR_${suffix}`,
+        family: "ATR",
+        filter,
+        configuration: {
+          name: `ATR_${suffix}`,
+          riskMode: "ATR",
+          atrMultiple: geometry.stopAtr,
+          rewardRisk: geometry.rewardRisk,
+          expiryCandles: 12,
+        },
+      });
+      candidates.push({
+        id: `HYBRID_${suffix}`,
+        family: "ATR_STRUCTURE_HYBRID",
+        filter,
+        configuration: {
+          name: `HYBRID_${suffix}`,
+          riskMode: "CAPPED_ATR",
+          atrMultiple: geometry.stopAtr,
+          rewardRisk: geometry.rewardRisk,
+          expiryCandles: 12,
+        },
+      });
+      if (medianAtrPct !== null) {
+        candidates.push({
+          id: `PERCENT_${suffix}`,
+          family: "PERCENT",
+          filter,
+          configuration: {
+            name: `PERCENT_${suffix}`,
+            riskMode: "PERCENT",
+            riskPercent: medianAtrPct * geometry.stopAtr,
+            rewardRisk: geometry.rewardRisk,
+            expiryCandles: 12,
+          },
+        });
+      }
+    }
+  }
+  return candidates;
+}
+
+function trainingThresholds(entries: BaselineEntry[], start: Date, end: Date): OfflineFilterThresholds {
+  const values = entries
+    .filter((entry) => assignPeriod(entry.openedAt, start, end) === "TRAIN")
+    .map((entry) => entry.atrPctAtEntry)
+    .filter((value): value is number => value !== undefined && Number.isFinite(value));
+  return {
+    atrPctLow: percentile(values, 0.2),
+    atrPctMedian: percentile(values, 0.5),
+    atrPctHigh: percentile(values, 0.8),
+  };
+}
+
+function filteredCandidateTrades(
+  candles: ClosedAnalysisCandle[],
+  entries: BaselineEntry[],
+  candidate: RobustCandidate,
+  thresholds: OfflineFilterThresholds,
+): BacktestTrade[] {
+  return evaluateEntries(candles, entries, candidate.configuration)
+    .filter((trade) => passesOfflineFilter(trade, candidate.filter, thresholds));
+}
+
+function frictionForPeriod(
+  trades: BacktestTrade[],
+  period: BacktestPeriod,
+  start: Date,
+  end: Date,
+): Record<FrictionScenarioName, BacktestSummary> {
+  return Object.fromEntries(Object.entries(FRICTION_SCENARIOS).map(([name, scenario]) => [
+    name,
+    summaryForTradePeriod(trades, period, start, end, scenario.totalBps),
+  ])) as Record<FrictionScenarioName, BacktestSummary>;
+}
+
+function enrichEntriesWithClosedMtfContext(
+  entries: EntryMap,
+  data: Record<HistoricalTimeframe, TimeframeData>,
+): void {
+  const trendCache = new Map<string, "bullish" | "bearish" | "sideways" | null>();
+  for (const timeframe of COMMERCIAL_SIGNAL_TIMEFRAMES) {
+    for (const entry of entries[timeframe]) {
+      const decisionTime = Date.parse(data[timeframe].candles[entry.entryIndex].closeTime);
+      let aligned = 0;
+      for (const contextTimeframe of COMMERCIAL_SIGNAL_TIMEFRAMES) {
+        const index = lastClosedIndexAt(data[contextTimeframe].candles, decisionTime);
+        if (index < 199) continue;
+        const key = `${contextTimeframe}:${index}`;
+        let trend = trendCache.get(key);
+        if (trend === undefined) {
+          trend = calculateTechnicalAnalysis(
+            data[contextTimeframe].candles.slice(index - 199, index + 1),
+            "binance",
+          ).marketStructure.trend;
+          trendCache.set(key, trend);
+        }
+        if ((entry.direction === "LONG" && trend === "bullish")
+          || (entry.direction === "SHORT" && trend === "bearish")) aligned += 1;
+      }
+      entry.alignedTimeframes = aligned;
+    }
+  }
+}
+
+function lastClosedIndexAt(candles: ClosedAnalysisCandle[], timestamp: number): number {
+  let low = 0;
+  let high = candles.length - 1;
+  let answer = -1;
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    if (Date.parse(candles[middle].closeTime) <= timestamp) {
+      answer = middle;
+      low = middle + 1;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return answer;
+}
+
+function robustStudySummary(report: ReturnType<typeof buildRobustCandidateStudy>) {
+  const brief = (summary: BacktestSummary | null | undefined) => summary ? ({
+    signals: summary.signals,
+    wins: summary.wins,
+    losses: summary.losses,
+    expired: summary.expired,
+    winRateIncludingExpired: summary.winRateIncludingExpired,
+    expiredRate: summary.expiredRate,
+    expectancyR: summary.expectancyR,
+    profitFactor: summary.profitFactor,
+    maximumDrawdownR: summary.maximumDrawdownR,
+  }) : null;
+  return {
+    metadata: report.metadata,
+    dataQuality: report.dataQuality,
+    baseline: {
+      overall: brief(report.baseline.overall),
+      oosFriction: Object.fromEntries(Object.entries(report.baseline.oosFriction)
+        .map(([name, summary]) => [name, brief(summary)])),
+    },
+    selectedCombined: {
+      overall: brief(report.selectedCombined.overall),
+      oosFriction: Object.fromEntries(Object.entries(report.selectedCombined.oosFriction)
+        .map(([name, summary]) => [name, brief(summary)])),
+    },
+    byTimeframe: Object.fromEntries(COMMERCIAL_SIGNAL_TIMEFRAMES.map((timeframe) => {
+      const item = report.byTimeframe[timeframe] as {
+        trainThresholds: OfflineFilterThresholds;
+        candidateCount: number;
+        selected?: RobustCandidate | null;
+        benchmarkWinner?: RobustCandidate | null;
+        reason?: string;
+        selectionEvidenceConservative?: Record<"train" | "development" | "validation", BacktestSummary>;
+        baseline: { overall: BacktestSummary; oosFriction: Record<FrictionScenarioName, BacktestSummary> };
+        candidate?: { overall: BacktestSummary; periods: Record<BacktestPeriod, BacktestSummary>; oosFriction: Record<FrictionScenarioName, BacktestSummary> };
+        promotionChecks?: Record<string, boolean>;
+        shadowEligible?: boolean;
+      };
+      return [timeframe, {
+        trainThresholds: item.trainThresholds,
+        candidateCount: item.candidateCount,
+        selected: item.selected ?? null,
+        benchmarkWinner: item.benchmarkWinner ?? null,
+        reason: item.reason,
+        selectionEvidenceConservative: item.selectionEvidenceConservative
+          ? Object.fromEntries(Object.entries(item.selectionEvidenceConservative).map(([period, summary]) => [period, brief(summary)]))
+          : null,
+        baseline: {
+          overall: brief(item.baseline.overall),
+          oosFriction: Object.fromEntries(Object.entries(item.baseline.oosFriction).map(([name, summary]) => [name, brief(summary)])),
+        },
+        candidate: item.candidate ? {
+          overall: brief(item.candidate.overall),
+          periods: Object.fromEntries(Object.entries(item.candidate.periods).map(([period, summary]) => [period, brief(summary)])),
+          oosFriction: Object.fromEntries(Object.entries(item.candidate.oosFriction).map(([name, summary]) => [name, brief(summary)])),
+        } : null,
+        promotionChecks: item.promotionChecks ?? null,
+        shadowEligible: item.shadowEligible ?? false,
+      }];
+    })),
+  };
 }
 
 function selectCandidate(
@@ -799,6 +1188,7 @@ function parseOptions(args: string[]) {
     geometry: args.includes("--geometry"),
     selection: args.includes("--selection"),
     baselineOnly: args.includes("--baseline-only"),
+    robust: args.includes("--robust"),
   };
 }
 

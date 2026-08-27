@@ -201,6 +201,51 @@ The baseline was rerun after the live fix with the exact original cutoff and `--
 
 Every measured delta is zero. This is not evidence that a forming candle could never have changed a live decision; historical final OHLC does not contain the sequence of partial intrabar snapshots needed to reconstruct that counterfactual without fabrication. It demonstrates that the fix changes only the live input-validity boundary and leaves the closed-candle strategy baseline unchanged.
 
+## Robust geometry and entry-quality study
+
+This follow-up kept the live strategy frozen and evaluated 312 bounded offline configurations per timeframe. The grid combined 17 valid `SL/TP` pairs (`SL 0.75–2 ATR`, `TP 1.25–3 ATR`, always `R:R >= 1.5`) with ATR, TRAIN-calibrated price-percentage, and ATR/structure-hybrid exits. It also compared entry-time volume, closed-candle MTF alignment, TRAIN p20–p80 volatility regime, support/resistance path compatibility, and their combined filter. No numeric score was invented because the live strategy has Boolean confluence gates rather than a score.
+
+All candidates reuse the exact baseline entry cohort. A filter can remove an entry but cannot create one; this makes the comparison conservative and guarantees that frequency cannot increase. Features use only information known when the entry candle closed. Candidate selection used conservative friction on TRAIN, DEVELOPMENT, and VALIDATION; OOS was opened only after selection.
+
+### Best non-baseline candidate selected before OOS
+
+| TF | Family / filter | SL | TP | Full signals | WIN | LOSS | EXPIRED | OOS expectancy / PF / DD | Low-friction OOS expectancy / PF |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 5m | Percentage / normal volatility | 0.2936% (2 TRAIN-median ATR) | 0.4404% (3 TRAIN-median ATR) | 1,000 | 223 | 388 | 389 | -0.0426 R / 0.9042 / 20.17 R | -0.5194 R / 0.3135 |
+| 15m | Percentage / normal volatility | 0.6022% (2 TRAIN-median ATR) | 0.9034% (3 TRAIN-median ATR) | 308 | 75 | 103 | 130 | +0.0651 R / 1.1560 / 7.13 R | -0.1674 R / 0.6947 |
+| 1h | ATR/structure hybrid / volume >= 1.10 | cap 2 ATR | 3 ATR | 103 | 24 | 40 | 39 | -0.2213 R / 0.6072 / 6.51 R | -0.4264 R / 0.4178 |
+| 4h | No selection | — | — | — | — | — | — | insufficient OOS sample | — |
+
+The 5m candidate cuts EXPIRED from 77.91% to 42.86% in OOS, but LOSS rises from 14.06% to 36.73%; expectancy and PF worsen even before costs. The 15m candidate cuts EXPIRED from 63.41% to 40.48% and is positive under ideal execution, but it is negative under the low 14 bps scenario. The 1h candidate has only 16 OOS observations and is negative before costs. The 4h OOS contains one settled observation, so no parameter selection is defensible.
+
+### OOS comparison
+
+| Config | Signals | WIN | LOSS | EXPIRED | WIN % incl. EXPIRED | Expectancy | PF | DD |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Baseline, all TF | 353 | 31 | 60 | 262 | 8.78% | -0.0204 R | 0.9300 | 12.44 R |
+| Selected non-baseline mix | 205 | 44 | 76 | 85 | 21.46% | -0.0345 R | 0.9231 | 20.17 R |
+| 5m baseline | 249 | 20 | 35 | 194 | 8.03% | +0.0085 R | 1.0322 | 9.70 R |
+| 5m candidate | 147 | 30 | 54 | 63 | 20.41% | -0.0426 R | 0.9042 | 20.17 R |
+| 15m baseline | 82 | 10 | 20 | 52 | 12.20% | -0.0652 R | 0.8157 | 11.25 R |
+| 15m candidate | 42 | 11 | 14 | 17 | 26.19% | +0.0651 R | 1.1560 | 7.13 R |
+| 1h baseline | 21 | 1 | 5 | 15 | 4.76% | -0.1774 R | 0.4962 | 5.22 R |
+| 1h candidate | 16 | 3 | 8 | 5 | 18.75% | -0.2213 R | 0.6072 | 6.51 R |
+| 4h baseline | 1 | 0 | 0 | 1 | 0% | -0.2422 R | 0 | 0.24 R |
+
+The selected mix is not an economic improvement: it resolves more trades but increases losses, produces worse ideal OOS expectancy, and more than doubles OOS drawdown. Under 14 bps its OOS expectancy is `-0.4400 R` with PF `0.3820`; under 35 bps it is `-1.0484 R` with PF `0.1020`. No selected timeframe passes all promotion checks, and no candidate qualifies for shadow testing.
+
+### Decision from this round
+
+- Baseline TP is too far relative to observed within-horizon movement: **YES descriptively**, but this alone is not a validated change.
+- Robust TP range: **none established**. `3 ATR` is the least-bad selected target in the bounded non-baseline set, but only 15m is positive before costs and it fails after low friction.
+- Robust SL range: **none established**. `2 ATR` is the least-bad selected stop/cap, but it converts too many expirations into losses in 5m and 1h.
+- Preferred geometry family: **inconclusive**. Percentage exits won pre-OOS selection for 5m/15m and the hybrid won for 1h, but none survives costs. ATR/structure remains dimensionally preferable for future research because it adapts to market regime; it is not validated here.
+- Timeframes with demonstrated OOS edge after low friction: **none**. Under ideal execution, 5m baseline is barely positive and the 15m candidate is positive, but neither survives 14 bps.
+- EXPIRED can be reduced substantially without worsening LOSS: **NO for the selected candidates**.
+- Candidate suitable for staging shadow testing: **NO**.
+
+The live recommendation remains **KEEP BASELINE**. A future study should focus on entry quality and use forward/shadow data, not promote the least-bad geometry from this search.
+
 ## Reproduction
 
 ```bash
@@ -208,6 +253,7 @@ corepack pnpm run analyze:signals -- --days=365 --end=2026-08-27T07:29:46.257Z -
 corepack pnpm run analyze:signals -- --days=365 --end=2026-08-27T07:29:46.257Z --baseline-only
 corepack pnpm run analyze:signals -- --days=365 --end=2026-08-27T07:29:46.257Z --geometry
 corepack pnpm run analyze:signals -- --days=365 --end=2026-08-27T07:29:46.257Z --selection
+corepack pnpm run analyze:signals -- --days=365 --end=2026-08-27T07:29:46.257Z --robust --terse
 ```
 
 The implementation and methodological caveats are documented in `docs/SIGNAL_ENGINE_ANALYSIS.md`.

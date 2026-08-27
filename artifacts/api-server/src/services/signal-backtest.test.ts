@@ -88,6 +88,26 @@ test("summary rejects invalid friction assumptions", () => {
   assert.throws(() => summarizeBacktest([], -1), /non-negative/);
 });
 
+test("percentage exits scale with price and preserve requested R:R", () => {
+  const percentageConfiguration: ExitConfiguration = {
+    name: "TEST_PERCENTAGE",
+    riskMode: "PERCENT",
+    riskPercent: 2,
+    rewardRisk: 1.5,
+    expiryCandles: 2,
+  };
+  const trade = evaluateEntry(
+    series([[100, 101, 99, 100], [100, 103, 97, 102], [102, 104, 101, 103]]),
+    entry(),
+    percentageConfiguration,
+  );
+  assert.equal(trade.riskUsd, 2);
+  assert.equal(trade.targetUsd, 3);
+  assert.equal(trade.stopAtr, 0.2);
+  assert.equal(trade.targetAtr, 0.3);
+  assert.equal(trade.outcome, "LOSS");
+});
+
 test("candle quality identifies gaps, duplicates and incomplete data", () => {
   const candles = series([[100, 101, 99, 100], [100, 101, 99, 100], [100, 101, 99, 100]]);
   candles[1] = { ...candles[1], timestamp: candles[0].timestamp, closeTime: candles[0].closeTime };

@@ -21,12 +21,19 @@ export type BaselineEntry = {
   baselineTakeProfit: number;
   baselineRiskReward: number;
   atrAtEntry: number;
+  atrPctAtEntry?: number;
+  rsiAtEntry?: number | null;
+  volumeRatioAtEntry?: number | null;
+  structureStopAtr?: number | null;
+  favorableObstacleAtr?: number | null;
+  alignedTimeframes?: number | null;
 };
 
 export type ExitConfiguration = {
   name: string;
-  riskMode: "BASELINE" | "CAPPED_ATR" | "ATR";
+  riskMode: "BASELINE" | "CAPPED_ATR" | "ATR" | "PERCENT";
   atrMultiple?: number;
+  riskPercent?: number;
   rewardRisk: number;
   expiryCandles: number;
 };
@@ -154,6 +161,23 @@ export function generateBaselineEntries(
       baselineTakeProfit: evaluation.takeProfit,
       baselineRiskReward: evaluation.riskRewardRatio,
       atrAtEntry,
+      atrPctAtEntry: (atrAtEntry / evaluation.entryPrice) * 100,
+      rsiAtEntry: technical.indicators.rsi14,
+      volumeRatioAtEntry: technical.indicators.volumeRatio,
+      structureStopAtr: structureStopDistanceAtr(
+        evaluation.outcome,
+        evaluation.entryPrice,
+        technical.marketStructure.support,
+        technical.marketStructure.resistance,
+        atrAtEntry,
+      ),
+      favorableObstacleAtr: favorableObstacleDistanceAtr(
+        evaluation.outcome,
+        evaluation.entryPrice,
+        technical.marketStructure.support,
+        technical.marketStructure.resistance,
+        atrAtEntry,
+      ),
     };
     entries.push(entry);
     const resolution = evaluateEntry(candles, entry, baselineConfiguration());
@@ -188,11 +212,14 @@ export function evaluateEntry(
 
   const baselineRisk = Math.abs(entry.entryPrice - entry.baselineStopLoss);
   const requestedAtrRisk = (configuration.atrMultiple ?? 0) * entry.atrAtEntry;
+  const requestedPercentageRisk = ((configuration.riskPercent ?? 0) / 100) * entry.entryPrice;
   const risk = configuration.riskMode === "BASELINE"
     ? baselineRisk
     : configuration.riskMode === "CAPPED_ATR"
       ? Math.min(baselineRisk, requestedAtrRisk)
-      : requestedAtrRisk;
+      : configuration.riskMode === "PERCENT"
+        ? requestedPercentageRisk
+        : requestedAtrRisk;
   if (!Number.isFinite(risk) || risk <= 0) throw new Error(`Candidate ${configuration.name} produced invalid risk.`);
 
   const stopLoss = entry.direction === "LONG" ? entry.entryPrice - risk : entry.entryPrice + risk;
@@ -268,6 +295,32 @@ export function evaluateEntry(
     postExpiryOutcome: postExpiry.outcome,
     postExpiryAdditionalCandles: postExpiry.additionalCandles,
   };
+}
+
+function structureStopDistanceAtr(
+  direction: SignalDirection,
+  entryPrice: number,
+  support: number | null,
+  resistance: number | null,
+  atr: number,
+): number | null {
+  const distance = direction === "LONG"
+    ? support !== null && support < entryPrice ? entryPrice - support : null
+    : resistance !== null && resistance > entryPrice ? resistance - entryPrice : null;
+  return distance === null ? null : distance / atr;
+}
+
+function favorableObstacleDistanceAtr(
+  direction: SignalDirection,
+  entryPrice: number,
+  support: number | null,
+  resistance: number | null,
+  atr: number,
+): number | null {
+  const distance = direction === "LONG"
+    ? resistance !== null && resistance > entryPrice ? resistance - entryPrice : null
+    : support !== null && support < entryPrice ? entryPrice - support : null;
+  return distance === null ? null : distance / atr;
 }
 
 export function evaluateEntries(
