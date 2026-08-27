@@ -18,7 +18,8 @@
     "db:migrate": "node ./scripts/db-migrate.mjs",
     "admin:bootstrap": "node ./scripts/admin-bootstrap.mjs",
     "auth:diagnose": "node ./scripts/auth-diagnose.mjs",
-    "smoke:api": "node ./scripts/smoke-api.mjs"
+    "smoke:api": "node ./scripts/smoke-api.mjs",
+    "analyze:signals": "corepack pnpm --filter @workspace/api-server analyze:signals"
   },
   "devDependencies": {
     "typescript": "~5.8.2"

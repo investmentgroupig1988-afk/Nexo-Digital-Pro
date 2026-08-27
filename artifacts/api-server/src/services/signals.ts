@@ -1,7 +1,8 @@
-import { and, desc, eq, getDatabase, signals } from "@workspace/db";
+import { and, desc, eq, getDatabase, inArray, signals, sql } from "@workspace/db";
 import type { HistoricalCandle, HistoricalTimeframe } from "./historical";
 import type { TechnicalAnalysisResult } from "./technical";
-import { evaluateSignal, resolveSignal, SIGNAL_STRATEGY_VERSION } from "./signal-engine";
+import { COMMERCIAL_SIGNAL_TIMEFRAMES, evaluateSignal, resolveSignal, SIGNAL_STRATEGY_VERSION } from "./signal-engine";
+import { summarizeTotalHistory } from "./signal-metrics";
 
 type SignalDatabase = ReturnType<typeof getDatabase>;
 
@@ -57,6 +58,14 @@ export async function buildSignalDashboard(input: {
   const losses = settled.filter((signal) => signal.status === "LOSS").length;
   const total = settled.length;
   const accumulatedReturnPct = total ? settled.reduce((sum, signal) => sum + Number(signal.returnPct ?? 0), 0) : null;
+  const totalHistoryRows = await database.select({
+    status: signals.status,
+    count: sql<number>`count(*)::int`,
+  }).from(signals).where(and(
+    eq(signals.symbol, input.symbol),
+    inArray(signals.timeframe, [...COMMERCIAL_SIGNAL_TIMEFRAMES]),
+    inArray(signals.status, ["WIN", "LOSS", "EXPIRED"]),
+  )).groupBy(signals.status);
 
   const trends = Object.values(input.multiTimeframe ?? {}).filter((trend): trend is "bullish" | "bearish" | "sideways" => trend !== null);
   const directional = trends.filter((trend) => trend !== "sideways");
@@ -76,6 +85,7 @@ export async function buildSignalDashboard(input: {
       lossRate: total ? round((losses / total) * 100) : null,
       accumulatedReturnPct: accumulatedReturnPct === null ? null : round(accumulatedReturnPct),
     },
+    totalHistory: summarizeTotalHistory(totalHistoryRows),
     history: scopedRows.filter((signal) => signal.status !== "OPEN").slice(0, 50).map(publicSignal),
   };
 }

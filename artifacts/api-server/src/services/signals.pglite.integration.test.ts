@@ -55,6 +55,35 @@ test("performance metrics are calculated only from real settled rows", async () 
   assert.deepEqual(filtered.metrics, { total: 0, wins: 0, losses: 0, winRate: null, lossRate: null, accumulatedReturnPct: null });
 });
 
+test("total history aggregates every persisted commercial signal beyond response limits", async () => {
+  const before = (await database.select().from(signals)).filter((signal) => ["WIN", "LOSS", "EXPIRED"].includes(signal.status)).length;
+  const now = new Date();
+  await database.insert(signals).values(Array.from({ length: 105 }, (_, index) => ({
+    symbol: "BTCUSDT",
+    timeframe: (["5m", "15m", "1h", "4h"] as const)[index % 4],
+    direction: "LONG",
+    entryPrice: "100",
+    stopLoss: "90",
+    takeProfit: "115",
+    riskRewardRatio: "1.5",
+    status: "EXPIRED",
+    openedAt: now,
+    closedAt: now,
+    expiresAt: now,
+    returnPct: "0",
+    result: "EXPIRED",
+    strategyVersion: "TOTAL_HISTORY_TEST",
+    configurationFingerprint: index.toString(16).padStart(64, "0"),
+    indicatorSnapshot: {},
+  })));
+
+  const result = await buildSignalDashboard({ symbol: "BTCUSDT", timeframe: "1h", candles: candles(), technical: technical("sideways"), now }, serviceDatabase);
+
+  assert.equal(result.totalHistory.total, before + 105);
+  assert.equal(result.totalHistory.expired >= 105, true);
+  assert.equal(result.history.length <= 50, true);
+});
+
 test("notification outbox deduplicates repeated and concurrent dispatches", async () => {
   const now = new Date();
   await database.insert(signals).values({ symbol: "BTCUSDT", timeframe: "5m", direction: "LONG", entryPrice: "100", stopLoss: "90", takeProfit: "115", riskRewardRatio: "1.5", status: "OPEN", openedAt: now, expiresAt: new Date(now.getTime() + 3_600_000), result: "OPEN", strategyVersion: "NOTIFICATION_TEST", configurationFingerprint: "n".repeat(64), indicatorSnapshot: {} });

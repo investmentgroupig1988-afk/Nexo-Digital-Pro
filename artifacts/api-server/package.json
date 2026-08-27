@@ -7,6 +7,7 @@
     "dev": "node ./build.mjs && node --enable-source-maps ./dist/index.mjs",
     "build": "node ./build.mjs && node ../../scripts/verify-api-dist.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
+    "analyze:signals": "tsx src/scripts/analyze-signal-engine.ts",
     "typecheck": "node ../../scripts/typecheck-api-server.mjs",
     "test": "tsx --test src/**/*.test.ts"
   },

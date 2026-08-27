@@ -147,6 +147,7 @@ export type SignalDashboardResponse = {
   context: { trend: "bullish" | "bearish" | "sideways" | null; condition: "trending" | "mixed" | "insufficient_data"; strength: "high" | "medium" | "low" };
   multiTimeframe: { trends: Record<string, "bullish" | "bearish" | "sideways" | null>; alignedCount: number; total: number };
   metrics: { total: number; wins: number; losses: number; winRate: number | null; lossRate: number | null; accumulatedReturnPct: number | null };
+  totalHistory: { total: number; wins: number; losses: number; expired: number; accuracy: number | null };
   history: CommercialSignal[];
 };
 
