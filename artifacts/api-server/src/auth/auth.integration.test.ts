@@ -28,8 +28,9 @@ if (!testDatabaseUrl || !integrationEnabled) {
   let server: Server;
   let baseUrl = "";
   const suffix = `${Date.now().toString().slice(-8)}${randomUUID().slice(0, 8)}`;
-  const admin = { email: `admin-${suffix}@example.test`, username: `admin_${suffix}`, password: "A correct test password 123" };
-  const member = { email: `member-${suffix}@example.test`, username: `member_${suffix}`, password: "A correct test password 123" };
+  const legalAcceptance = { acceptTerms: true, adultConfirmed: true } as const;
+  const admin = { email: `admin-${suffix}@example.test`, username: `admin_${suffix}`, password: "A correct test password 123", ...legalAcceptance };
+  const member = { email: `member-${suffix}@example.test`, username: `member_${suffix}`, password: "A correct test password 123", ...legalAcceptance };
   let adminCookie = "";
   let memberCookie = "";
   let memberId = "";
