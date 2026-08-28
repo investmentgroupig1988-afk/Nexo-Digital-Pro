@@ -46,6 +46,25 @@ test("several closed candles plus one forming candle deliver only closed input",
   assert.equal(selected.some((candle) => candle.timestamp === new Date(raw[3][0]).toISOString()), false);
 });
 
+test("a forming candle becomes eligible exactly once when its closeTime is reached", () => {
+  const intervalMs = TIMEFRAME_MS["15m"];
+  const start = Date.UTC(2026, 7, 27, 0);
+  const first = kline(start, intervalMs, 100);
+  const next = kline(start + intervalMs, intervalMs, 101);
+
+  const beforeClose = selectClosedBinanceCandles([first, next], next[6] - 1, 2);
+  const atClose = selectClosedBinanceCandles([first, next], next[6], 2);
+  const repeatedAfterClose = selectClosedBinanceCandles([first, next], next[6] + 10_000, 2);
+
+  assert.deepEqual(beforeClose.map((candle) => candle.timestamp), [new Date(first[0]).toISOString()]);
+  assert.deepEqual(atClose.map((candle) => candle.timestamp), [
+    new Date(first[0]).toISOString(),
+    new Date(next[0]).toISOString(),
+  ]);
+  assert.deepEqual(repeatedAfterClose, atClose);
+  assert.equal(new Set(atClose.map((candle) => candle.timestamp)).size, atClose.length);
+});
+
 test("removing a forming candle preserves the evaluated signal fingerprint", () => {
   const intervalMs = TIMEFRAME_MS["5m"];
   const start = Date.UTC(2026, 7, 26, 0);
