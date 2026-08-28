@@ -39,7 +39,7 @@ All-time accuracy under the requested definition is `0 / 4 = 0%`. This sample is
 
 `WIN` contributes `+R:R`, `LOSS` contributes `-1R`, and `EXPIRED` contributes its signed mark-to-market result at expiry in initial-risk multiples. Same-candle TP/SL ambiguity is resolved as LOSS. Leverage is never modeled or assumed.
 
-Execution friction is reported as sensitivity analysis, not as a claim about a particular exchange or account: ideal `0 bps`, low `14 bps` round trip (8 fee + 2 spread + 4 slippage), and conservative `35 bps` (20 + 5 + 10). Cost is converted to R independently for every trade from that trade's entry-to-stop percentage.
+Execution friction is reported as sensitivity analysis, not as a claim about a particular exchange or account: `0`, `5`, `10`, and `20 bps` total round trip. The non-zero scenarios apportion total cost as fee/spread/slippage `3/1/1`, `6/2/2`, and `12/3/5 bps`. Cost is converted to R independently for every trade from that trade's entry-to-stop percentage.
 
 ## Baseline result
 
@@ -77,6 +77,31 @@ The small positive full-sample result is not stable: the untouched out-of-sample
 
 Median favorable excursion before resolution was only 1.25–1.58 ATR, while median targets were 5.25–5.90 ATR. The targets are therefore ambitious relative to the current 12-candle horizon. Median stops are also wide in volatility terms, but the tested narrower variants did not improve robustness out of sample.
 
+### Full distance distributions (P25 / P50 / P75 / P90)
+
+| TF | SL % | TP % | SL ATR | TP ATR |
+| --- | --- | --- | --- | --- |
+| 5m | 0.349 / 0.530 / 0.834 / 1.262 | 0.524 / 0.795 / 1.250 / 1.893 | 3.10 / 3.93 / 4.81 / 5.64 | 4.65 / 5.90 / 7.22 / 8.47 |
+| 15m | 0.612 / 0.977 / 1.481 / 2.265 | 0.918 / 1.465 / 2.222 / 3.397 | 2.72 / 3.50 / 4.38 / 5.20 | 4.08 / 5.25 / 6.58 / 7.81 |
+| 1h | 1.362 / 2.200 / 3.348 / 4.330 | 2.042 / 3.300 / 5.022 / 6.495 | 2.79 / 3.57 / 4.41 / 5.22 | 4.19 / 5.35 / 6.62 / 7.83 |
+| 4h | 3.762 / 4.697 / 6.768 / 7.430 | 5.644 / 7.046 / 10.151 / 11.145 | 3.15 / 3.63 / 4.32 / 5.12 | 4.72 / 5.44 / 6.48 / 7.68 |
+
+| TF | MFE % | MAE % | MFE ATR | MAE ATR |
+| --- | --- | --- | --- | --- |
+| 5m | 0.081 / 0.214 / 0.463 / 0.821 | 0.102 / 0.221 / 0.397 / 0.672 | 0.60 / 1.58 / 2.99 / 5.07 | 0.80 / 1.68 / 2.67 / 3.83 |
+| 15m | 0.171 / 0.407 / 0.857 / 1.462 | 0.189 / 0.401 / 0.736 / 1.241 | 0.64 / 1.43 / 2.93 / 4.52 | 0.76 / 1.46 / 2.54 / 3.49 |
+| 1h | 0.296 / 0.828 / 1.701 / 2.647 | 0.477 / 0.916 / 1.613 / 2.626 | 0.45 / 1.35 / 2.69 / 3.94 | 0.78 / 1.45 / 2.51 / 3.67 |
+| 4h | 0.787 / 1.906 / 4.585 / 5.248 | 0.948 / 1.796 / 3.146 / 3.829 | 0.50 / 1.25 / 2.96 / 3.49 | 0.70 / 1.24 / 2.37 / 3.07 |
+
+| TF | Candles to MFE | Candles to MAE | Candles to TP (WIN only) | Candles to SL (LOSS only) |
+| --- | --- | --- | --- | --- |
+| 5m | 2 / 5 / 9 / 12 | 2 / 6 / 10 / 12 | 5 / 7 / 10 / 11 | 4 / 7 / 10 / 11 |
+| 15m | 2 / 4 / 8 / 11 | 2 / 5 / 9 / 12 | 4 / 6 / 9 / 11 | 4 / 6 / 9 / 11 |
+| 1h | 1 / 4 / 9 / 11 | 2 / 6 / 10 / 12 | 6.5 / 8 / 9.5 / 10 | 3 / 5 / 11 / 11.4 |
+| 4h | 1.5 / 4 / 8.5 / 12 | 2 / 5 / 11 / 12 | 4 / 4 / 4 / 4 | 6.75 / 8.5 / 10.25 / 11.3 |
+
+The 4h timing percentiles are descriptive only: the entire cohort contains 31 signals, one WIN, and two LOSS outcomes.
+
 ## What happened after baseline expiry
 
 Each expired signal was followed for up to three additional baseline expiry horizons without modifying its persisted result.
@@ -113,9 +138,9 @@ All experimental candidates convert many expirations into settled outcomes, but 
 
 The baseline currently emits only R:R 1.5 entries, so the requested R:R buckets above 1.75 contain no observations. There is no empirical basis in this dataset for changing the 1.5 minimum.
 
-## Bounded per-timeframe geometry study
+## Earlier bounded per-timeframe geometry study
 
-A second, deliberately limited grid tested seven volatility-normalized stops (`1`, `1.25`, `1.5`, `1.75`, `2`, `2.5`, and `3 ATR`) against three reward/risk ratios (`1.5`, `1.75`, and `2`), always with the live 12-candle expiry. This is 21 candidates per timeframe, not an unbounded optimizer. Entries, filters, scoring, frequency, and expiry remained frozen.
+This earlier exploratory pass is retained for reproducibility and used the then-declared `14/35 bps` friction scenarios. It was superseded by the final bounded matrix below, which uses the requested `0/5/10/20 bps` scenarios. It tested seven volatility-normalized stops (`1`, `1.25`, `1.5`, `1.75`, `2`, `2.5`, and `3 ATR`) against three reward/risk ratios (`1.5`, `1.75`, and `2`), always with the live 12-candle expiry. Entries, filters, scoring, frequency, and expiry remained frozen.
 
 Candidates were ranked independently per timeframe using only TRAIN and DEVELOPMENT. The ranking maximized the worse of their conservative-friction expectancies, with average expectancy, profit factor, and drawdown as tie-breakers. VALIDATION and OUT_OF_SAMPLE remained sealed until a candidate had been selected. A candidate still had to pass every promotion gate; being the least-bad grid member did not make it deployable.
 
@@ -201,50 +226,60 @@ The baseline was rerun after the live fix with the exact original cutoff and `--
 
 Every measured delta is zero. This is not evidence that a forming candle could never have changed a live decision; historical final OHLC does not contain the sequence of partial intrabar snapshots needed to reconstruct that counterfactual without fabrication. It demonstrates that the fix changes only the live input-validity boundary and leaves the closed-candle strategy baseline unchanged.
 
-## Robust geometry and entry-quality study
+## Robust geometry and entry-quality study — final bounded matrix
 
-This follow-up kept the live strategy frozen and evaluated 312 bounded offline configurations per timeframe. The grid combined 17 valid `SL/TP` pairs (`SL 0.75–2 ATR`, `TP 1.25–3 ATR`, always `R:R >= 1.5`) with ATR, TRAIN-calibrated price-percentage, and ATR/structure-hybrid exits. It also compared entry-time volume, closed-candle MTF alignment, TRAIN p20–p80 volatility regime, support/resistance path compatibility, and their combined filter. No numeric score was invented because the live strategy has Boolean confluence gates rather than a score.
+This follow-up kept the live strategy frozen and evaluated 342 bounded offline configurations per timeframe: six baseline/filter controls; 20 ATR geometries and the corresponding 20 baseline-structure/ATR-cap geometries; and 16 fixed-percentage geometries, each crossed with six entry-time filters. Stops were `0.75`, `1`, `1.25`, `1.5`, or `2 ATR`, or `0.25%`, `0.30%`, `0.40%`, or `0.50%`; reward/risk was `1.25`, `1.5`, `1.75`, or `2`. The live minimum remains `1.5`; `1.25` exists only inside this offline sensitivity study. Expiry remained 12 candles.
 
-All candidates reuse the exact baseline entry cohort. A filter can remove an entry but cannot create one; this makes the comparison conservative and guarantees that frequency cannot increase. Features use only information known when the entry candle closed. Candidate selection used conservative friction on TRAIN, DEVELOPMENT, and VALIDATION; OOS was opened only after selection.
+All candidates reuse the exact baseline entry cohort. Filters may remove entries but cannot create them, so frequency cannot increase. Volume, closed-candle multi-timeframe alignment, TRAIN-derived volatility regime, and entry-time support/resistance compatibility use only information available at the signal decision. Candidates were ranked using the worst 20-bps expectancy across TRAIN, DEVELOPMENT, and VALIDATION, then average expectancy, profit factor, and drawdown. The final 15% OOS was opened only after selection.
 
-### Best non-baseline candidate selected before OOS
+### Baseline and the three pre-OOS selections
 
-| TF | Family / filter | SL | TP | Full signals | WIN | LOSS | EXPIRED | OOS expectancy / PF / DD | Low-friction OOS expectancy / PF |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 5m | Percentage / normal volatility | 0.2936% (2 TRAIN-median ATR) | 0.4404% (3 TRAIN-median ATR) | 1,000 | 223 | 388 | 389 | -0.0426 R / 0.9042 / 20.17 R | -0.5194 R / 0.3135 |
-| 15m | Percentage / normal volatility | 0.6022% (2 TRAIN-median ATR) | 0.9034% (3 TRAIN-median ATR) | 308 | 75 | 103 | 130 | +0.0651 R / 1.1560 / 7.13 R | -0.1674 R / 0.6947 |
-| 1h | ATR/structure hybrid / volume >= 1.10 | cap 2 ATR | 3 ATR | 103 | 24 | 40 | 39 | -0.2213 R / 0.6072 / 6.51 R | -0.4264 R / 0.4178 |
-| 4h | No selection | — | — | — | — | — | — | insufficient OOS sample | — |
+`SL %` and `TP %` are fixed values for percentage candidates and observed full-sample medians for ATR/hybrid candidates.
 
-The 5m candidate cuts EXPIRED from 77.91% to 42.86% in OOS, but LOSS rises from 14.06% to 36.73%; expectancy and PF worsen even before costs. The 15m candidate cuts EXPIRED from 63.41% to 40.48% and is positive under ideal execution, but it is negative under the low 14 bps scenario. The 1h candidate has only 16 OOS observations and is negative before costs. The 4h OOS contains one settled observation, so no parameter selection is defensible.
+| Candidate | TF | SL % | TP % | R:R | Signals | Signals/day | WIN | LOSS | EXPIRED | Win % | Expectancy | PF | Max DD | OOS expectancy | OOS PF | OOS DD |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| BASELINE | all | 0.654 | 0.981 | 1.5 | 2,259 | 6.189 | 234 | 341 | 1,684 | 10.36% | +0.0140 R | 1.0505 | 18.70 R | -0.0204 R | 0.9300 | 12.44 R |
+| Percentage + normal volatility | 5m | 0.500 | 1.000 | 2.0 | 1,000 | 2.740 | 60 | 179 | 761 | 6.00% | -0.0015 R | 0.9951 | 23.94 R | +0.0028 R | 1.0100 | 15.60 R |
+| ATR/structure cap + normal volatility | 15m | 0.569 | 1.138 | 2.0 | 308 | 0.844 | 51 | 114 | 143 | 16.56% | +0.0307 R | 1.0685 | 17.51 R | +0.1134 R | 1.2263 | 7.32 R |
+| ATR/structure cap + volume >= 1.10 | 1h | 1.243 | 1.864 | 1.5 | 103 | 0.282 | 24 | 40 | 39 | 23.30% | -0.0234 R | 0.9492 | 8.41 R | -0.2213 R | 0.6072 | 6.51 R |
 
-### OOS comparison
+No 4h candidate was selected because its predeclared chronological sample minimum was not met. Its annual cohort has only 31 signals and the OOS partition only one observation.
 
-| Config | Signals | WIN | LOSS | EXPIRED | WIN % incl. EXPIRED | Expectancy | PF | DD |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Baseline, all TF | 353 | 31 | 60 | 262 | 8.78% | -0.0204 R | 0.9300 | 12.44 R |
-| Selected non-baseline mix | 205 | 44 | 76 | 85 | 21.46% | -0.0345 R | 0.9231 | 20.17 R |
-| 5m baseline | 249 | 20 | 35 | 194 | 8.03% | +0.0085 R | 1.0322 | 9.70 R |
-| 5m candidate | 147 | 30 | 54 | 63 | 20.41% | -0.0426 R | 0.9042 | 20.17 R |
-| 15m baseline | 82 | 10 | 20 | 52 | 12.20% | -0.0652 R | 0.8157 | 11.25 R |
-| 15m candidate | 42 | 11 | 14 | 17 | 26.19% | +0.0651 R | 1.1560 | 7.13 R |
-| 1h baseline | 21 | 1 | 5 | 15 | 4.76% | -0.1774 R | 0.4962 | 5.22 R |
-| 1h candidate | 16 | 3 | 8 | 5 | 18.75% | -0.2213 R | 0.6072 | 6.51 R |
-| 4h baseline | 1 | 0 | 0 | 1 | 0% | -0.2422 R | 0 | 0.24 R |
+### Chronological stability before costs
 
-The selected mix is not an economic improvement: it resolves more trades but increases losses, produces worse ideal OOS expectancy, and more than doubles OOS drawdown. Under 14 bps its OOS expectancy is `-0.4400 R` with PF `0.3820`; under 35 bps it is `-1.0484 R` with PF `0.1020`. No selected timeframe passes all promotion checks, and no candidate qualifies for shadow testing.
+| TF candidate | TRAIN expectancy | DEVELOPMENT | VALIDATION | OOS | Walk-forward positive folds at 20 bps |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 5m percentage 0.50% / 1.00% | -0.0286 R | -0.0200 R | +0.0961 R | +0.0028 R | 0 / 4 |
+| 15m hybrid 2 ATR cap / 4 ATR target | +0.0058 R | +0.0433 R | +0.0136 R | +0.1134 R | 0 / 4 |
+| 1h hybrid 2 ATR cap / 3 ATR target | -0.0154 R | +0.0004 R | +0.0977 R | -0.2213 R | 0 / 4 |
+
+The anchored walk-forward uses only the first 85% of the year. Its four folds train on `0–35`, `0–50`, `0–65`, and `0–75%`, then test the immediately following `15`, `15`, `10`, and `10%` windows. The final 15% OOS remains untouched by all fold selection. None of the selected families produced a positive-expectancy, PF-above-one test fold after 20 bps.
+
+### OOS friction sensitivity
+
+Friction is total round trip and is converted into R using each trade's actual stop percentage.
+
+| Variant | 0 bps expectancy / PF / DD | 5 bps | 10 bps | 20 bps |
+| --- | --- | --- | --- | --- |
+| BASELINE, all TF | -0.0204 / 0.9300 / 12.44 | -0.1516 / 0.5932 / 55.63 | -0.2829 / 0.3938 / 101.16 | -0.5455 / 0.1909 / 193.45 |
+| 5m selected | +0.0028 / 1.0100 / 15.60 | -0.0972 / 0.7124 / 25.42 | -0.1972 / 0.5112 / 35.65 | -0.3972 / 0.2746 / 59.57 |
+| 15m selected | +0.1134 / 1.2263 / 7.32 | +0.0175 / 1.0316 / 8.41 | -0.0783 / 0.8712 / 9.95 | -0.2700 / 0.6272 / 16.31 |
+| 1h selected | -0.2213 / 0.6072 / 6.51 | -0.2945 / 0.5278 / 7.29 | -0.3678 / 0.4623 / 8.18 | -0.5143 / 0.3613 / 10.35 |
+
+The 15m candidate is the only one that remains marginally positive at 5 bps, but 42 OOS signals are not enough to call this stable; it fails at 10 and 20 bps and every conservative-friction walk-forward fold. The combined selected mix reduces EXPIRED from 74.55% to 66.83%, but increases LOSS enough to leave OOS expectancy negative from 5 bps onward.
 
 ### Decision from this round
 
-- Baseline TP is too far relative to observed within-horizon movement: **YES descriptively**, but this alone is not a validated change.
-- Robust TP range: **none established**. `3 ATR` is the least-bad selected target in the bounded non-baseline set, but only 15m is positive before costs and it fails after low friction.
-- Robust SL range: **none established**. `2 ATR` is the least-bad selected stop/cap, but it converts too many expirations into losses in 5m and 1h.
-- Preferred geometry family: **inconclusive**. Percentage exits won pre-OOS selection for 5m/15m and the hybrid won for 1h, but none survives costs. ATR/structure remains dimensionally preferable for future research because it adapts to market regime; it is not validated here.
-- Timeframes with demonstrated OOS edge after low friction: **none**. Under ideal execution, 5m baseline is barely positive and the 15m candidate is positive, but neither survives 14 bps.
-- EXPIRED can be reduced substantially without worsening LOSS: **NO for the selected candidates**.
-- Candidate suitable for staging shadow testing: **NO**.
+- **Is any candidate clearly superior to BASELINE? NO.** None satisfies positive OOS expectancy/PF, controlled drawdown, chronological stability, and realistic friction together.
+- **Is baseline TP too far? YES descriptively.** Median targets are 5.25–5.90 ATR while median MFE is 1.25–1.58 ATR. This diagnosis does not validate a replacement.
+- **Robust TP range:** none established. The selected geometries span roughly 1.0% on 5m, 4 ATR on 15m, and 3 ATR on 1h, but all fail at 10–20 bps or lack stability.
+- **Robust SL range:** none established. Selected stops/caps are 0.50% or 2 ATR, but results vary materially by period and timeframe.
+- **ATR, percentage, structure, or hybrid? INCONCLUSIVE.** The winners differ by timeframe. ATR/hybrid remains dimensionally sensible, while fixed percentages are less regime-adaptive, but neither family demonstrates a durable edge here.
+- **Timeframes with demonstrated OOS edge after friction:** none. 15m is only marginal at 5 bps; 5m and 1h fail, and 4h is under-sampled.
+- **Can EXPIRED be reduced materially without worsening LOSS? NO in a robust way.** The selected mix lowers EXPIRED by 9.67 percentage points, but its OOS LOSS count rises enough to erase the benefit after costs.
+- **Candidate suitable for paper/shadow staging:** NO. The least-bad research lead is 15m with a 2 ATR cap, 4 ATR target, R:R 2, and normal-volatility filter, but it should not enter staging until more forward data and venue-specific friction validate it.
 
-The live recommendation remains **KEEP BASELINE**. A future study should focus on entry quality and use forward/shadow data, not promote the least-bad geometry from this search.
+The live recommendation remains **KEEP BASELINE**. No parameter, threshold, filter, scheduler behavior, Telegram path, or persisted signal was changed.
 
 ## Reproduction
 
@@ -254,6 +289,69 @@ corepack pnpm run analyze:signals -- --days=365 --end=2026-08-27T07:29:46.257Z -
 corepack pnpm run analyze:signals -- --days=365 --end=2026-08-27T07:29:46.257Z --geometry
 corepack pnpm run analyze:signals -- --days=365 --end=2026-08-27T07:29:46.257Z --selection
 corepack pnpm run analyze:signals -- --days=365 --end=2026-08-27T07:29:46.257Z --robust --terse
+corepack pnpm run analyze:signals -- --days=365 --end=2026-08-27T07:29:46.257Z --robust --selection
+corepack pnpm run analyze:signals -- --days=365 --end=2026-08-27T07:29:46.257Z --robust --selection --focus=15m
 ```
 
 The implementation and methodological caveats are documented in `docs/SIGNAL_ENGINE_ANALYSIS.md`.
+
+## Four-year closed-candle extension — 2022-08-28 to 2026-08-28
+
+This extension supersedes the one-year sample for robustness conclusions, but not as a promise of future performance. It uses the immutable live baseline with the same closed-candle rule as the live adapter: a Binance kline is available only when `closeTime <= observationTime`. No live threshold, exit, expiry, scheduler, database record, or notification was changed.
+
+The fixed dataset contains 420,972 5m, 140,471 15m, 35,283 1h, and 8,986 4h closed candles. The downloader excluded one still-open candle per timeframe. It found no duplicate or out-of-order timestamps; it found 16, 5, 1, and 0 missing intervals respectively. Missing intervals were reported and never fabricated or interpolated.
+
+### Corrected baseline over four years
+
+| TF | Signals | WIN | LOSS | EXPIRED | EXPIRED % | Ideal expectancy / PF | 5 bps expectancy / PF | 10 bps expectancy / PF |
+| --- | ---: | ---: | ---: | ---: | ---: | --- | --- | --- |
+| 5m | 6,606 | 727 | 998 | 4,881 | 73.89% | +0.0137 / 1.0486 | -0.1005 / 0.7117 | -0.2147 / 0.4939 |
+| 15m | 2,140 | 246 | 397 | 1,497 | 69.95% | -0.0229 / 0.9255 | -0.0905 / 0.7404 | -0.1581 / 0.5972 |
+| 1h | 523 | 62 | 88 | 373 | 71.32% | +0.0153 / 1.0527 | -0.0144 / 0.9531 | -0.0441 / 0.8637 |
+| 4h | 140 | 15 | 21 | 104 | 74.29% | +0.0050 / 1.0187 | -0.0073 / 0.9734 | -0.0195 / 0.9303 |
+| **All** | **9,409** | **1,050** | **1,504** | **6,855** | **72.86%** | **+0.0053 / 1.0184** | **-0.0921 / 0.7333** | **-0.1894 / 0.5371** |
+
+At 20 bps the combined expectancy is `-0.3842 R`, PF `0.3020`, and maximum drawdown `3617.41 R`. Even the 5 bps sensitivity removes the idealized edge. The five largest positive trades contribute only 0.27% of total positive R, so the failure is not caused by one isolated winner; it is broad after costs.
+
+The prior one-year cutoff is inside this interval. Only four signals occur after `2026-08-27T07:29:46.257Z`; all four are EXPIRED. That genuinely new sample is far too small to serve as an independent final OOS.
+
+### Regime evidence
+
+| TF | Most favorable descriptive regime | Signals | Ideal expectancy / PF | 5 bps expectancy / PF | 10 bps expectancy / PF | Interpretation |
+| --- | --- | ---: | --- | --- | --- | --- |
+| 5m | reference-trend aligned | 3,132 | +0.0316 / 1.1113 | negative | -0.1868 / 0.5527 | Large sample, but no edge after costs. |
+| 15m | bullish 4h context | 821 | +0.0097 / 1.0334 | negative | -0.1222 / 0.6703 | The earlier favorable year was period-dependent. |
+| 1h | normal causal volatility | 264 | +0.0646 / 1.2387 | +0.0367 / 1.1288 | +0.0088 / 1.0295 | Interesting subgroup, but the corresponding walk-forward candidates fail every test window at 10 bps. |
+| 4h | low causal volatility | 34 | +0.1131 / 1.3282 | +0.0967 / 1.2742 | +0.0802 / 1.2225 | Too few signals; result concentration is high and final holdout fails. |
+
+The 15m baseline yearly ideal expectancy was `-0.0220`, `-0.0039`, `-0.0923`, and `+0.0365 R`. This explains why the previous 15m hypothesis looked favorable in the latest annual slice: it did not generalize across regimes or years.
+
+### Entry-quality hypotheses and walk-forward
+
+Seven simple hypotheses were declared before evaluation: baseline, volume confirmation, closed-candle MTF confirmation, 4h reference-trend alignment, exclusion of high causal volatility, structural path compatibility, and MTF plus non-high volatility. All retain baseline TP, SL, R:R, and expiry; filters can remove but never add signals.
+
+No candidate passed the required combination of positive expectancy, PF above one after friction, chronological stability, sufficient sample, limited concentration, and final holdout. At 10 bps, the selected final-fold results were:
+
+| TF | Selected from prior data | Holdout signals | WIN / LOSS / EXPIRED | Expectancy | PF | DD |
+| --- | --- | ---: | --- | ---: | ---: | ---: |
+| 5m | 4h reference-trend aligned | 457 | 57 / 56 / 344 | -0.1219 R | 0.6723 | not promotion-grade |
+| 15m | structural path compatible | 3 | insufficient | -0.9322 R | 0 | insufficient |
+| 1h | volume confirmation | 69 | 7 / 7 / 55 | -0.0398 R | 0.8651 | 7.94 R |
+| 4h | MTF plus non-high volatility | 13 | 0 / 2 / 11 | -0.1946 R | 0.3975 | 3.49 R |
+
+The 4h full-sample MTF/non-high-volatility result remains an investigation lead only: 72 total observations and positive 10/20 bps full-sample metrics are overridden by its negative final holdout and tiny sample.
+
+### Evidence classification
+
+- **5m — WEAK:** abundant observations, near-flat ideal edge, clearly negative after friction and in every selected walk-forward test.
+- **15m — WEAK:** negative full-sample ideal expectancy and unstable year-to-year behavior; the prior cap hypothesis remains rejected.
+- **1h — INVESTIGATE:** closest to break-even after low friction and a plausible normal-volatility subgroup, but no robust walk-forward edge.
+- **4h — INSUFFICIENT:** potentially favorable low-volatility slices, but only 140 baseline signals and a failed 13-signal final holdout.
+
+**NO ROBUST CANDIDATE FOUND.** There is not yet sufficient evidence of an edge suitable for commercial use. The live strategy remains BASELINE apart from the already-published closed-candle input correction.
+
+Reproduce the compact four-year report with:
+
+```bash
+corepack pnpm run analyze:signals -- --days=1461 --end=2026-08-28T00:00:00.000Z --long-horizon --compact
+```

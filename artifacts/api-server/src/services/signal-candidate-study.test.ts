@@ -2,17 +2,25 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   buildRobustGeometryGrid,
+  buildRobustPercentageGrid,
   passesOfflineFilter,
   selectCandidateBeforeOos,
 } from "./signal-candidate-study";
 import type { BacktestSummary, BacktestTrade } from "./signal-backtest";
 
-test("bounded geometry grid preserves minimum 1.5 R:R", () => {
+test("bounded ATR grid includes research-only R:R 1.25 without changing live parameters", () => {
   const grid = buildRobustGeometryGrid();
-  assert.equal(grid.length, 17);
-  assert.ok(grid.every(({ rewardRisk }) => rewardRisk >= 1.5));
-  assert.deepEqual(grid.at(0), { stopAtr: 0.75, targetAtr: 1.25, rewardRisk: 1.25 / 0.75 });
-  assert.deepEqual(grid.at(-1), { stopAtr: 2, targetAtr: 3, rewardRisk: 1.5 });
+  assert.equal(grid.length, 20);
+  assert.ok(grid.every(({ rewardRisk }) => rewardRisk >= 1.25));
+  assert.deepEqual(grid.at(0), { stopAtr: 0.75, targetAtr: 0.9375, rewardRisk: 1.25 });
+  assert.deepEqual(grid.at(-1), { stopAtr: 2, targetAtr: 4, rewardRisk: 2 });
+});
+
+test("bounded percentage grid covers the requested 0.25%-0.50% stops", () => {
+  const grid = buildRobustPercentageGrid();
+  assert.equal(grid.length, 16);
+  assert.deepEqual(grid.at(0), { stopPercent: 0.25, targetPercent: 0.3125, rewardRisk: 1.25 });
+  assert.deepEqual(grid.at(-1), { stopPercent: 0.5, targetPercent: 1, rewardRisk: 2 });
 });
 
 test("quality filters use only diagnostics known at entry", () => {
@@ -56,6 +64,7 @@ function diagnosticTrade(overrides: Partial<BacktestTrade>): BacktestTrade {
     closedAt: "2026-01-01T00:05:00.000Z", durationCandles: 1, durationMs: 300_000, realizedR: 1.5,
     mfeUsd: 1.5, maeUsd: 0.5, mfePct: 1.5, maePct: 0.5, mfeR: 1.5, maeR: 0.5,
     mfeAtr: 1.5, maeAtr: 0.5, postExpiryOutcome: null, postExpiryAdditionalCandles: null,
+    timeToMfeCandles: 1, timeToMaeCandles: 1,
     ...overrides,
   };
 }

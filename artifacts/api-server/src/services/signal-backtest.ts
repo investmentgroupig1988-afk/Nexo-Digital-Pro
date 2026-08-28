@@ -10,6 +10,8 @@ import { calculateTechnicalAnalysis } from "./technical";
 export type ClosedAnalysisCandle = HistoricalCandle & { closeTime: string };
 export type BacktestOutcome = "WIN" | "LOSS" | "EXPIRED" | "CENSORED";
 export type BacktestPeriod = "TRAIN" | "DEVELOPMENT" | "VALIDATION" | "OUT_OF_SAMPLE";
+export type VolatilityRegime = "HIGH" | "NORMAL" | "LOW";
+export type TrendRegime = "ALIGNED_TREND" | "OPPOSING_TREND" | "SIDEWAYS" | "UNAVAILABLE";
 
 export type BaselineEntry = {
   timeframe: HistoricalTimeframe;
@@ -27,6 +29,10 @@ export type BaselineEntry = {
   structureStopAtr?: number | null;
   favorableObstacleAtr?: number | null;
   alignedTimeframes?: number | null;
+  volatilityRegimeAtEntry?: VolatilityRegime | null;
+  volatilityPercentileAtEntry?: number | null;
+  trendRegimeAtEntry?: TrendRegime | null;
+  referenceTrendAtEntry?: "bullish" | "bearish" | "sideways" | null;
 };
 
 export type ExitConfiguration = {
@@ -61,6 +67,8 @@ export type BacktestTrade = BaselineEntry & {
   maeR: number | null;
   mfeAtr: number | null;
   maeAtr: number | null;
+  timeToMfeCandles: number | null;
+  timeToMaeCandles: number | null;
   postExpiryOutcome: "WIN" | "LOSS" | "NEITHER" | null;
   postExpiryAdditionalCandles: number | null;
 };
@@ -100,6 +108,8 @@ export type CandleQuality = {
 };
 
 const FOLLOW_UP_EXPIRY_MULTIPLIER = 3;
+// Research-only floor. The live engine continues to enforce MINIMUM_RISK_REWARD (1.5).
+export const OFFLINE_MINIMUM_RISK_REWARD = 1.25;
 
 export function validateCandleSeries(
   candles: ClosedAnalysisCandle[],
@@ -178,6 +188,7 @@ export function generateBaselineEntries(
         technical.marketStructure.resistance,
         atrAtEntry,
       ),
+      ...causalVolatilityRegime(window),
     };
     entries.push(entry);
     const resolution = evaluateEntry(candles, entry, baselineConfiguration());
@@ -187,6 +198,37 @@ export function generateBaselineEntries(
   }
 
   return entries;
+}
+
+export function causalVolatilityRegime(candles: ClosedAnalysisCandle[]): {
+  volatilityRegimeAtEntry: VolatilityRegime | null;
+  volatilityPercentileAtEntry: number | null;
+} {
+  const trueRangePct = candles.slice(1).map((candle, index) => {
+    const previousClose = candles[index].close;
+    if (!Number.isFinite(previousClose) || previousClose <= 0) return null;
+    const range = Math.max(
+      candle.high - candle.low,
+      Math.abs(candle.high - previousClose),
+      Math.abs(candle.low - previousClose),
+    );
+    return Number.isFinite(range) ? range / previousClose * 100 : null;
+  }).filter((value): value is number => value !== null);
+  const rolling = trueRangePct.slice(13).map((_, index) => {
+    const values = trueRangePct.slice(index, index + 14);
+    return values.reduce((sum, value) => sum + value, 0) / values.length;
+  });
+  const current = rolling.at(-1);
+  const reference = rolling.slice(0, -1);
+  if (current === undefined || reference.length < 30) {
+    return { volatilityRegimeAtEntry: null, volatilityPercentileAtEntry: null };
+  }
+  const belowOrEqual = reference.filter((value) => value <= current).length;
+  const percentileRank = belowOrEqual / reference.length;
+  return {
+    volatilityRegimeAtEntry: percentileRank >= 0.75 ? "HIGH" : percentileRank <= 0.25 ? "LOW" : "NORMAL",
+    volatilityPercentileAtEntry: percentileRank,
+  };
 }
 
 export function baselineConfiguration(): ExitConfiguration {
@@ -203,8 +245,8 @@ export function evaluateEntry(
   entry: BaselineEntry,
   configuration: ExitConfiguration,
 ): BacktestTrade {
-  if (configuration.rewardRisk < MINIMUM_RISK_REWARD) {
-    throw new Error(`Candidate ${configuration.name} violates minimum R:R ${MINIMUM_RISK_REWARD}.`);
+  if (configuration.rewardRisk < OFFLINE_MINIMUM_RISK_REWARD) {
+    throw new Error(`Candidate ${configuration.name} violates offline minimum R:R ${OFFLINE_MINIMUM_RISK_REWARD}.`);
   }
   if (!Number.isInteger(configuration.expiryCandles) || configuration.expiryCandles < 1) {
     throw new Error(`Candidate ${configuration.name} has an invalid expiry horizon.`);
@@ -232,13 +274,21 @@ export function evaluateEntry(
   let realizedR: number | null = null;
   let mfe = 0;
   let mae = 0;
+  let timeToMfeCandles = 0;
+  let timeToMaeCandles = 0;
 
   for (let index = entry.entryIndex + 1; index <= availableFinalIndex; index += 1) {
     const candle = candles[index];
     const favorable = entry.direction === "LONG" ? candle.high - entry.entryPrice : entry.entryPrice - candle.low;
     const adverse = entry.direction === "LONG" ? entry.entryPrice - candle.low : candle.high - entry.entryPrice;
-    mfe = Math.max(mfe, favorable);
-    mae = Math.max(mae, adverse);
+    if (favorable > mfe) {
+      mfe = favorable;
+      timeToMfeCandles = index - entry.entryIndex;
+    }
+    if (adverse > mae) {
+      mae = adverse;
+      timeToMaeCandles = index - entry.entryIndex;
+    }
     const hitsStop = entry.direction === "LONG" ? candle.low <= stopLoss : candle.high >= stopLoss;
     const hitsTarget = entry.direction === "LONG" ? candle.high >= takeProfit : candle.low <= takeProfit;
     if (hitsStop || hitsTarget) {
@@ -292,6 +342,8 @@ export function evaluateEntry(
     maeR: closeIndex === null ? null : mae / risk,
     mfeAtr: closeIndex === null ? null : mfe / entry.atrAtEntry,
     maeAtr: closeIndex === null ? null : mae / entry.atrAtEntry,
+    timeToMfeCandles: closeIndex === null ? null : timeToMfeCandles,
+    timeToMaeCandles: closeIndex === null ? null : timeToMaeCandles,
     postExpiryOutcome: postExpiry.outcome,
     postExpiryAdditionalCandles: postExpiry.additionalCandles,
   };

@@ -4,6 +4,7 @@ import {
   baselineConfiguration,
   evaluateEntries,
   generateBaselineEntries,
+  netRealizedR,
   percentile,
   summarizeBacktest,
   validateCandleSeries,
@@ -19,6 +20,7 @@ import { isCandleClosedAt, type HistoricalTimeframe } from "../services/historic
 import { calculateTechnicalAnalysis } from "../services/technical";
 import {
   buildRobustGeometryGrid,
+  buildRobustPercentageGrid,
   passesOfflineFilter,
   selectCandidateBeforeOos,
   type OfflineFilterName,
@@ -33,7 +35,7 @@ type EntryMap = Record<HistoricalTimeframe, BaselineEntry[]>;
 type CommercialTimeframe = (typeof COMMERCIAL_SIGNAL_TIMEFRAMES)[number];
 type TimeframeSummaries = { all: BacktestSummary } & Record<CommercialTimeframe, BacktestSummary>;
 type PeriodSummaries = Record<BacktestPeriod, TimeframeSummaries>;
-type FrictionScenarioName = "ideal" | "low" | "conservative";
+type FrictionScenarioName = "ideal" | "low" | "medium" | "conservative";
 type FrictionScenario = {
   totalBps: number;
   feeBps: number;
@@ -142,18 +144,25 @@ const FRICTION_SCENARIOS: Record<FrictionScenarioName, FrictionScenario> = {
     note: "Analytical ceiling with no execution friction.",
   },
   low: {
-    totalBps: 14,
-    feeBps: 8,
+    totalBps: 5,
+    feeBps: 3,
+    spreadBps: 1,
+    slippageBps: 1,
+    note: "Five basis points total round trip; sensitivity scenario, not an exchange fee promise.",
+  },
+  medium: {
+    totalBps: 10,
+    feeBps: 6,
     spreadBps: 2,
-    slippageBps: 4,
-    note: "Round-trip sensitivity scenario; not an exchange fee promise.",
+    slippageBps: 2,
+    note: "Ten basis points total round trip; sensitivity scenario, not an exchange fee promise.",
   },
   conservative: {
-    totalBps: 35,
-    feeBps: 20,
-    spreadBps: 5,
-    slippageBps: 10,
-    note: "Conservative round-trip sensitivity scenario; not an exchange fee promise.",
+    totalBps: 20,
+    feeBps: 12,
+    spreadBps: 3,
+    slippageBps: 5,
+    note: "Twenty basis points total round trip; conservative sensitivity scenario, not an exchange fee promise.",
   },
 };
 
@@ -173,6 +182,22 @@ const entries = Object.fromEntries(COMMERCIAL_SIGNAL_TIMEFRAMES.map((timeframe) 
 ])) as EntryMap;
 
 const baseline = evaluateAcrossTimeframes(entries, fetched, () => baselineConfiguration());
+if (options.longHorizon) {
+  enrichEntriesWithClosedMtfContext(entries, fetched);
+  const enrichedBaseline = evaluateAcrossTimeframes(entries, fetched, () => baselineConfiguration());
+  const study = buildLongHorizonStudy(
+    entries,
+    enrichedBaseline,
+    fetched,
+    analysisStart,
+    observedAt,
+    options.days,
+  );
+  console.log(JSON.stringify(roundDeep(
+    options.compact ? compactLongHorizonStudy(study, options.focus) : study,
+  ), null, 2));
+  process.exit(0);
+}
 if (options.robust) {
   enrichEntriesWithClosedMtfContext(entries, fetched);
   const robustStudy = buildRobustCandidateStudy(
@@ -183,7 +208,10 @@ if (options.robust) {
     observedAt,
     options.days,
   );
-  console.log(JSON.stringify(roundDeep(options.terse ? robustStudySummary(robustStudy) : robustStudy), null, 2));
+  const summarized = robustStudySummary(robustStudy);
+  console.log(JSON.stringify(roundDeep(
+    options.selection ? robustSelectionSummary(summarized, options.focus) : options.terse ? summarized : robustStudy,
+  ), null, 2));
   process.exit(0);
 }
 if (options.baselineOnly) {
@@ -392,6 +420,412 @@ function evaluateAcrossTimeframes(
   ])) as TradeMap;
 }
 
+type EntryQualityCandidate = {
+  id: string;
+  hypothesis: string;
+  complexity: number;
+  accepts: (trade: BacktestTrade) => boolean;
+};
+
+function priorResearchCutoff() {
+  return new Date("2026-08-27T07:29:46.257Z");
+}
+
+function entryQualityCandidates(): EntryQualityCandidate[] {
+  return [
+  {
+    id: "BASELINE",
+    hypothesis: "Unfiltered live baseline control.",
+    complexity: 0,
+    accepts: () => true,
+  },
+  {
+    id: "VOLUME_CONFIRMATION",
+    hypothesis: "Entry-time relative volume >= 1.10 may remove low-participation setups.",
+    complexity: 1,
+    accepts: (trade) => (trade.volumeRatioAtEntry ?? Number.NEGATIVE_INFINITY) >= 1.1,
+  },
+  {
+    id: "MTF_CONFIRMATION",
+    hypothesis: "At least two causally closed timeframes aligned with the signal may improve directional quality.",
+    complexity: 1,
+    accepts: (trade) => (trade.alignedTimeframes ?? 0) >= 2,
+  },
+  {
+    id: "REFERENCE_TREND_ALIGNED",
+    hypothesis: "Signals aligned with the last closed 4h trend may avoid opposing-regime entries.",
+    complexity: 1,
+    accepts: (trade) => trade.trendRegimeAtEntry === "ALIGNED_TREND",
+  },
+  {
+    id: "NOT_HIGH_VOLATILITY",
+    hypothesis: "Avoiding the highest causal realized-volatility quartile may reduce noise-driven losses.",
+    complexity: 1,
+    accepts: (trade) => trade.volatilityRegimeAtEntry === "LOW" || trade.volatilityRegimeAtEntry === "NORMAL",
+  },
+  {
+    id: "STRUCTURE_PATH_CLEAR",
+    hypothesis: "The structural stop must fit inside live risk and the target must not sit beyond the nearest entry-time obstacle.",
+    complexity: 1,
+    accepts: (trade) => trade.structureStopAtr !== null
+      && trade.structureStopAtr !== undefined
+      && trade.favorableObstacleAtr !== null
+      && trade.favorableObstacleAtr !== undefined
+      && trade.structureStopAtr <= trade.stopAtr
+      && trade.targetAtr <= trade.favorableObstacleAtr,
+  },
+  {
+    id: "MTF_AND_NOT_HIGH_VOLATILITY",
+    hypothesis: "Closed-candle MTF alignment plus non-extreme realized volatility may favor selective, stable entries.",
+    complexity: 2,
+    accepts: (trade) => (trade.alignedTimeframes ?? 0) >= 2
+      && (trade.volatilityRegimeAtEntry === "LOW" || trade.volatilityRegimeAtEntry === "NORMAL"),
+  },
+  ];
+}
+
+function buildLongHorizonStudy(
+  _entries: EntryMap,
+  baselineTrades: TradeMap,
+  data: Record<HistoricalTimeframe, TimeframeData>,
+  start: Date,
+  end: Date,
+  days: number,
+) {
+  const priorCutoff = priorResearchCutoff();
+  const allBaseline = COMMERCIAL_SIGNAL_TIMEFRAMES.flatMap((timeframe) => baselineTrades[timeframe]);
+  return {
+    metadata: {
+      provider: "Binance public Spot klines",
+      symbol: "BTCUSDT",
+      analysisStart: start.toISOString(),
+      analysisEnd: end.toISOString(),
+      days,
+      strategy: "Immutable live BASELINE; exits, thresholds, expiry and scheduler unchanged.",
+      candlePolicy: "Live and research both accept a kline only when Binance closeTime <= the effective observation time.",
+      regimePolicy: {
+        trend: "The last causally closed 4h context at the entry time: bullish, bearish or sideways; alignment is evaluated against signal direction.",
+        volatility: "Current 14-candle realized true-range percentage ranked against earlier rolling 14-candle values inside the 200 closed candles available at entry; <=p25 LOW, >=p75 HIGH, otherwise NORMAL.",
+      },
+      partitions: "Chronological anchored folds 0-40/40-55, 0-55/55-70, 0-70/70-85 and 0-85/85-100. No random split.",
+      oosCaveat: "The latest 15% is sealed within this run but overlaps dates inspected in the prior one-year study. Only observations after the prior cutoff are genuinely new and are reported separately; they cannot yet establish commercial edge.",
+      priorResearchCutoff: priorCutoff.toISOString(),
+      frictionScenarios: FRICTION_SCENARIOS,
+      candidatePolicy: "Seven predeclared baseline-exit entry-quality hypotheses. No exit grid and no parameter search.",
+      liveStrategyChanged: false,
+      databaseWrites: false,
+      historyWrites: false,
+      telegramCalls: false,
+    },
+    dataQuality: Object.fromEntries(COMMERCIAL_SIGNAL_TIMEFRAMES.map((timeframe) => [timeframe, {
+      ...validateCandleSeries(data[timeframe].candles, INTERVAL_MS[timeframe], end),
+      incompleteExcluded: data[timeframe].incompleteExcluded,
+    }])),
+    baseline: {
+      overall: longHorizonPerformance(allBaseline, days),
+      byTimeframe: Object.fromEntries(COMMERCIAL_SIGNAL_TIMEFRAMES.map((timeframe) => [
+        timeframe,
+        {
+          performance: longHorizonPerformance(baselineTrades[timeframe], days),
+          chronologicalYears: chronologicalYearSummaries(baselineTrades[timeframe], start, end),
+        },
+      ])),
+      genuinelyNewAfterPriorCutoff: longHorizonPerformance(
+        allBaseline.filter((trade) => Date.parse(trade.openedAt) > priorCutoff.getTime()),
+        Math.max(1 / 24, (end.getTime() - priorCutoff.getTime()) / 86_400_000),
+      ),
+    },
+    regimes: Object.fromEntries(COMMERCIAL_SIGNAL_TIMEFRAMES.map((timeframe) => [timeframe, {
+      referenceTrend: regimeGroups(
+        baselineTrades[timeframe],
+        (trade) => trade.referenceTrendAtEntry ?? "unavailable",
+        days,
+      ),
+      trendAlignment: regimeGroups(
+        baselineTrades[timeframe],
+        (trade) => trade.trendRegimeAtEntry ?? "UNAVAILABLE",
+        days,
+      ),
+      volatility: regimeGroups(
+        baselineTrades[timeframe],
+        (trade) => trade.volatilityRegimeAtEntry ?? "UNAVAILABLE",
+        days,
+      ),
+      combined: regimeGroups(
+        baselineTrades[timeframe],
+        (trade) => `${trade.trendRegimeAtEntry ?? "UNAVAILABLE"}|${trade.volatilityRegimeAtEntry ?? "UNAVAILABLE"}`,
+        days,
+      ),
+    }])),
+    candidates: Object.fromEntries(COMMERCIAL_SIGNAL_TIMEFRAMES.map((timeframe) => [
+      timeframe,
+      qualityCandidateStudy(baselineTrades[timeframe], start, end, days),
+    ])),
+  };
+}
+
+function longHorizonPerformance(trades: BacktestTrade[], exposureDays: number) {
+  const baseline = summarizeBacktest(trades);
+  const positive = trades.map((trade) => netRealizedR(trade, 0))
+    .filter((value): value is number => value !== null && value > 0)
+    .sort((left, right) => right - left);
+  const positiveTotal = positive.reduce((sum, value) => sum + value, 0);
+  return {
+    signals: baseline.signals,
+    wins: baseline.wins,
+    losses: baseline.losses,
+    expired: baseline.expired,
+    winRateIncludingExpired: baseline.winRateIncludingExpired,
+    expiredRate: baseline.expiredRate,
+    consecutiveLosses: baseline.consecutiveLosses,
+    signalsPerDay: exposureDays > 0 ? baseline.signals / exposureDays : null,
+    signalsPerWeek: exposureDays > 0 ? baseline.signals / exposureDays * 7 : null,
+    topFivePositiveContributionPct: positiveTotal > 0
+      ? positive.slice(0, 5).reduce((sum, value) => sum + value, 0) / positiveTotal * 100
+      : null,
+    friction: Object.fromEntries(Object.entries(FRICTION_SCENARIOS).map(([name, scenario]) => {
+      const summary = summarizeBacktest(trades, scenario.totalBps);
+      return [name, {
+        totalBps: scenario.totalBps,
+        expectancyR: summary.expectancyR,
+        profitFactor: summary.profitFactor,
+        maximumDrawdownR: summary.maximumDrawdownR,
+      }];
+    })),
+  };
+}
+
+function longHorizonSummary(trades: BacktestTrade[], frictionBps: number, exposureDays: number) {
+  const summary = summarizeBacktest(trades, frictionBps);
+  const positive = trades.map((trade) => netRealizedR(trade, frictionBps))
+    .filter((value): value is number => value !== null && value > 0)
+    .sort((left, right) => right - left);
+  const positiveTotal = positive.reduce((sum, value) => sum + value, 0);
+  return {
+    signals: summary.signals,
+    wins: summary.wins,
+    losses: summary.losses,
+    expired: summary.expired,
+    winRateIncludingExpired: summary.winRateIncludingExpired,
+    expiredRate: summary.expiredRate,
+    expectancyR: summary.expectancyR,
+    profitFactor: summary.profitFactor,
+    maximumDrawdownR: summary.maximumDrawdownR,
+    consecutiveLosses: summary.consecutiveLosses,
+    signalsPerDay: exposureDays > 0 ? summary.signals / exposureDays : null,
+    signalsPerWeek: exposureDays > 0 ? summary.signals / exposureDays * 7 : null,
+    topFivePositiveContributionPct: positiveTotal > 0
+      ? positive.slice(0, 5).reduce((sum, value) => sum + value, 0) / positiveTotal * 100
+      : null,
+  };
+}
+
+function regimeGroups(
+  trades: BacktestTrade[],
+  keyFor: (trade: BacktestTrade) => string,
+  days: number,
+) {
+  const groups = new Map<string, BacktestTrade[]>();
+  for (const trade of trades) {
+    const key = keyFor(trade);
+    const group = groups.get(key) ?? [];
+    group.push(trade);
+    groups.set(key, group);
+  }
+  return Object.fromEntries([...groups.entries()].sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, values]) => [key, longHorizonPerformance(values, days)]));
+}
+
+function chronologicalYearSummaries(trades: BacktestTrade[], start: Date, end: Date) {
+  const windows: Array<{ start: Date; end: Date }> = [];
+  let cursor = start;
+  while (cursor < end) {
+    const next = new Date(Math.min(end.getTime(), cursor.getTime() + 365 * 86_400_000));
+    windows.push({ start: cursor, end: next });
+    cursor = next;
+  }
+  return windows.map((window, index) => {
+    const selected = trades.filter((trade) => {
+      const openedAt = Date.parse(trade.openedAt);
+      return openedAt >= window.start.getTime() && openedAt < window.end.getTime();
+    });
+    const windowDays = (window.end.getTime() - window.start.getTime()) / 86_400_000;
+    return {
+      name: `YEAR_${index + 1}`,
+      start: window.start.toISOString(),
+      end: window.end.toISOString(),
+      performance: longHorizonPerformance(selected, windowDays),
+    };
+  });
+}
+
+function qualityCandidateStudy(trades: BacktestTrade[], start: Date, end: Date, days: number) {
+  const evaluated = entryQualityCandidates().map((candidate) => ({
+    candidate,
+    trades: trades.filter(candidate.accepts),
+  }));
+  const full = Object.fromEntries(evaluated.map(({ candidate, trades: selected }) => [candidate.id, {
+    hypothesis: candidate.hypothesis,
+    complexity: candidate.complexity,
+    performance: longHorizonPerformance(selected, days),
+    finalHoldout: longHorizonPerformance(
+      fractionTrades(selected, start, end, 0.85, 1),
+      days * 0.15,
+    ),
+  }]));
+  const folds = [
+    { name: "WF1", trainEnd: 0.4, testEnd: 0.55 },
+    { name: "WF2", trainEnd: 0.55, testEnd: 0.7 },
+    { name: "WF3", trainEnd: 0.7, testEnd: 0.85 },
+    { name: "FINAL_HOLDOUT", trainEnd: 0.85, testEnd: 1 },
+  ].map((fold) => {
+    const ranked = evaluated.map(({ candidate, trades: selected }) => ({
+      candidate,
+      training: summarizeBacktest(
+        fractionTrades(selected, start, end, 0, fold.trainEnd),
+        FRICTION_SCENARIOS.medium.totalBps,
+      ),
+    })).filter(({ training }) => training.signals >= 30 && training.expectancyR !== null)
+      .sort(compareQualityCandidate);
+    const selected = ranked[0];
+    if (!selected) return { ...fold, selected: null, training: null, test: null };
+    const selectedTrades = evaluated.find(({ candidate }) => candidate.id === selected.candidate.id)!.trades;
+    const testTrades = fractionTrades(selectedTrades, start, end, fold.trainEnd, fold.testEnd);
+    const testDays = days * (fold.testEnd - fold.trainEnd);
+    return {
+      ...fold,
+      selected: { id: selected.candidate.id, hypothesis: selected.candidate.hypothesis },
+      training: longHorizonSummary(
+        fractionTrades(selectedTrades, start, end, 0, fold.trainEnd),
+        FRICTION_SCENARIOS.medium.totalBps,
+        days * fold.trainEnd,
+      ),
+      test: longHorizonSummary(testTrades, FRICTION_SCENARIOS.medium.totalBps, testDays),
+    };
+  });
+  return { full, anchoredWalkForwardAt10Bps: folds };
+}
+
+function compareQualityCandidate(
+  left: { candidate: EntryQualityCandidate; training: BacktestSummary },
+  right: { candidate: EntryQualityCandidate; training: BacktestSummary },
+) {
+  const expectancy = (right.training.expectancyR ?? Number.NEGATIVE_INFINITY)
+    - (left.training.expectancyR ?? Number.NEGATIVE_INFINITY);
+  if (expectancy !== 0) return expectancy;
+  const profitFactor = (right.training.profitFactor ?? 0) - (left.training.profitFactor ?? 0);
+  if (profitFactor !== 0) return profitFactor;
+  if (left.candidate.complexity !== right.candidate.complexity) {
+    return left.candidate.complexity - right.candidate.complexity;
+  }
+  return (left.training.maximumDrawdownR ?? Number.POSITIVE_INFINITY)
+    - (right.training.maximumDrawdownR ?? Number.POSITIVE_INFINITY);
+}
+
+function fractionTrades(
+  trades: BacktestTrade[],
+  start: Date,
+  end: Date,
+  from: number,
+  to: number,
+) {
+  const duration = end.getTime() - start.getTime();
+  return trades.filter((trade) => {
+    const point = (Date.parse(trade.openedAt) - start.getTime()) / duration;
+    return point >= from && point < to;
+  });
+}
+
+function compactLongHorizonStudy(
+  report: ReturnType<typeof buildLongHorizonStudy>,
+  focus: CommercialTimeframe | null,
+) {
+  const regimeRows: Array<Record<string, unknown>> = [];
+  const candidateRows: Array<Record<string, unknown>> = [];
+  const walkForward: Array<Record<string, unknown>> = [];
+  const timeframes = focus === null ? COMMERCIAL_SIGNAL_TIMEFRAMES : [focus];
+  for (const timeframe of timeframes) {
+    for (const kind of ["referenceTrend", "volatility"] as const) {
+      for (const [regime, performance] of Object.entries(report.regimes[timeframe][kind])) {
+        regimeRows.push({ timeframe, kind, regime, ...compactLongPerformance(performance) });
+      }
+    }
+    const candidateStudy = report.candidates[timeframe];
+    const ranked = Object.entries(candidateStudy.full).map(([id, item]) => ({
+      id,
+      item,
+      rank: item.performance.friction.medium.expectancyR ?? Number.NEGATIVE_INFINITY,
+    })).sort((left, right) => right.rank - left.rank).slice(0, 3);
+    for (const { id, item } of ranked) {
+      candidateRows.push({
+        timeframe,
+        id,
+        hypothesis: item.hypothesis,
+        full: compactLongPerformance(item.performance),
+        finalHoldout: compactLongPerformance(item.finalHoldout),
+      });
+    }
+    for (const fold of candidateStudy.anchoredWalkForwardAt10Bps) {
+      walkForward.push({
+        timeframe,
+        fold: fold.name,
+        selected: fold.selected?.id ?? null,
+        training: fold.training === null ? null : compactFoldSummary(fold.training),
+        test: fold.test === null ? null : compactFoldSummary(fold.test),
+      });
+    }
+  }
+  return {
+    metadata: report.metadata,
+    dataQuality: report.dataQuality,
+    baselineOverall: compactLongPerformance(report.baseline.overall),
+    baselineByTimeframe: Object.fromEntries(timeframes.map((timeframe) => [
+      timeframe,
+      compactLongPerformance(report.baseline.byTimeframe[timeframe].performance),
+    ])),
+    chronologicalYears: Object.fromEntries(timeframes.map((timeframe) => [
+      timeframe,
+      report.baseline.byTimeframe[timeframe].chronologicalYears.map((window) => ({
+        name: window.name,
+        start: window.start,
+        end: window.end,
+        ...compactLongPerformance(window.performance),
+      })),
+    ])),
+    regimes: regimeRows,
+    topCandidates: candidateRows,
+    walkForward,
+    genuinelyNewAfterPriorCutoff: compactLongPerformance(report.baseline.genuinelyNewAfterPriorCutoff),
+  };
+}
+
+function compactLongPerformance(performance: ReturnType<typeof longHorizonPerformance>) {
+  return {
+    signals: performance.signals,
+    wins: performance.wins,
+    losses: performance.losses,
+    expired: performance.expired,
+    winRateIncludingExpired: performance.winRateIncludingExpired,
+    expiredRate: performance.expiredRate,
+    signalsPerDay: performance.signalsPerDay,
+    consecutiveLosses: performance.consecutiveLosses,
+    topFivePositiveContributionPct: performance.topFivePositiveContributionPct,
+    friction: performance.friction,
+  };
+}
+
+function compactFoldSummary(summary: ReturnType<typeof longHorizonSummary>) {
+  return {
+    signals: summary.signals,
+    wins: summary.wins,
+    losses: summary.losses,
+    expired: summary.expired,
+    expectancyR: summary.expectancyR,
+    profitFactor: summary.profitFactor,
+    maximumDrawdownR: summary.maximumDrawdownR,
+  };
+}
+
 function buildRobustCandidateStudy(
   cohort: EntryMap,
   data: Record<HistoricalTimeframe, TimeframeData>,
@@ -408,6 +842,7 @@ function buildRobustCandidateStudy(
       const trades = filteredCandidateTrades(data[timeframe].candles, cohort[timeframe], candidate, thresholds);
       return {
         candidate,
+        trades,
         train: summaryForTradePeriod(trades, "TRAIN", start, end, FRICTION_SCENARIOS.conservative.totalBps),
         development: summaryForTradePeriod(trades, "DEVELOPMENT", start, end, FRICTION_SCENARIOS.conservative.totalBps),
         validation: summaryForTradePeriod(trades, "VALIDATION", start, end, FRICTION_SCENARIOS.conservative.totalBps),
@@ -475,6 +910,7 @@ function buildRobustCandidateStudy(
       },
       baseline: {
         overall: summarizeBacktest(baselineTrades[timeframe]),
+        frequency: signalFrequency(summarizeBacktest(baselineTrades[timeframe]), days),
         periods: Object.fromEntries(PERIODS.map((period) => [
           period,
           summaryForTradePeriod(baselineTrades[timeframe], period, start, end),
@@ -483,8 +919,10 @@ function buildRobustCandidateStudy(
       },
       candidate: {
         overall: summarizeBacktest(trades),
+        frequency: signalFrequency(summarizeBacktest(trades), days),
         periods: periodsIdeal,
         oosFriction,
+        walkForward: anchoredWalkForward(evaluated, start, end),
       },
       promotionChecks,
       shadowEligible: Object.values(promotionChecks).every(Boolean),
@@ -510,14 +948,17 @@ function buildRobustCandidateStudy(
       selection: "Worst-period conservative-friction expectancy across TRAIN/DEVELOPMENT/VALIDATION, then average expectancy, PF and drawdown. OOS is evaluated only after selection.",
       geometry: {
         stopAtr: [0.75, 1, 1.25, 1.5, 2],
-        targetAtr: [1.25, 1.5, 1.75, 2, 2.5, 3],
-        minimumRewardRisk: 1.5,
-        validPairs: buildRobustGeometryGrid().length,
+        stopPercent: [0.25, 0.3, 0.4, 0.5],
+        rewardRiskStudied: [1.25, 1.5, 1.75, 2],
+        liveBaselineMinimumRewardRisk: 1.5,
+        offlineResearchMinimumRewardRisk: 1.25,
+        atrPairs: buildRobustGeometryGrid().length,
+        percentagePairs: buildRobustPercentageGrid().length,
         expiryCandlesChanged: false,
       },
       families: {
         ATR: "Stop/target scale with ATR at entry.",
-        PERCENT: "Price percentage is calibrated from TRAIN median ATR percentage, then frozen for DEV/VALIDATION/OOS.",
+        PERCENT: "Explicit 0.25%, 0.30%, 0.40%, and 0.50% stops are frozen before DEV/VALIDATION/OOS.",
         ATR_STRUCTURE_HYBRID: "The live structural/ATR stop is capped by the candidate ATR distance; optional filters require stop and target compatibility with entry-time support/resistance.",
       },
       filters: {
@@ -536,18 +977,23 @@ function buildRobustCandidateStudy(
     }])),
     baseline: {
       overall: summarizeBacktest(allBaseline),
+      frequency: signalFrequency(summarizeBacktest(allBaseline), days),
       oosFriction: frictionForPeriod(allBaseline, "OUT_OF_SAMPLE", start, end),
+      distributions: Object.fromEntries(COMMERCIAL_SIGNAL_TIMEFRAMES.map((timeframe) => [
+        timeframe,
+        timeframeDiagnostics(baselineTrades[timeframe]),
+      ])),
     },
     selectedCombined: {
       overall: summarizeBacktest(allSelected),
+      frequency: signalFrequency(summarizeBacktest(allSelected), days),
       oosFriction: frictionForPeriod(allSelected, "OUT_OF_SAMPLE", start, end),
     },
     byTimeframe,
   };
 }
 
-function robustCandidates(timeframe: CommercialTimeframe, thresholds: OfflineFilterThresholds): RobustCandidate[] {
-  const medianAtrPct = thresholds.atrPctMedian;
+function robustCandidates(_timeframe: CommercialTimeframe, _thresholds: OfflineFilterThresholds): RobustCandidate[] {
   const candidates: RobustCandidate[] = [];
   for (const filter of ROBUST_FILTERS) {
     candidates.push({
@@ -584,20 +1030,23 @@ function robustCandidates(timeframe: CommercialTimeframe, thresholds: OfflineFil
           expiryCandles: 12,
         },
       });
-      if (medianAtrPct !== null) {
-        candidates.push({
-          id: `PERCENT_${suffix}`,
-          family: "PERCENT",
-          filter,
-          configuration: {
-            name: `PERCENT_${suffix}`,
-            riskMode: "PERCENT",
-            riskPercent: medianAtrPct * geometry.stopAtr,
-            rewardRisk: geometry.rewardRisk,
-            expiryCandles: 12,
-          },
-        });
-      }
+    }
+  }
+  for (const geometry of buildRobustPercentageGrid()) {
+    for (const filter of ROBUST_FILTERS) {
+      const suffix = `S${geometry.stopPercent}P_T${geometry.targetPercent}P_${filter}`;
+      candidates.push({
+        id: `PERCENT_${suffix}`,
+        family: "PERCENT",
+        filter,
+        configuration: {
+          name: `PERCENT_${suffix}`,
+          riskMode: "PERCENT",
+          riskPercent: geometry.stopPercent,
+          rewardRisk: geometry.rewardRisk,
+          expiryCandles: 12,
+        },
+      });
     }
   }
   return candidates;
@@ -637,6 +1086,86 @@ function frictionForPeriod(
   ])) as Record<FrictionScenarioName, BacktestSummary>;
 }
 
+function signalFrequency(summary: BacktestSummary, days: number) {
+  return {
+    signalsPerDay: days > 0 ? summary.signals / days : null,
+    signalsPerWeek: days > 0 ? summary.signals / days * 7 : null,
+  };
+}
+
+function anchoredWalkForward(
+  evaluated: Array<{ candidate: RobustCandidate; trades: BacktestTrade[] }>,
+  start: Date,
+  end: Date,
+) {
+  const folds = [
+    { name: "WF1", trainEnd: 0.35, testEnd: 0.5 },
+    { name: "WF2", trainEnd: 0.5, testEnd: 0.65 },
+    { name: "WF3", trainEnd: 0.65, testEnd: 0.75 },
+    { name: "WF4", trainEnd: 0.75, testEnd: 0.85 },
+  ];
+  const results = folds.map((fold) => {
+    const eligible = evaluated
+      .filter(({ candidate }) => candidate.family !== "BASELINE")
+      .map((item) => ({
+        ...item,
+        training: summaryForFraction(
+          item.trades,
+          start,
+          end,
+          0,
+          fold.trainEnd,
+          FRICTION_SCENARIOS.conservative.totalBps,
+        ),
+      }))
+      .filter(({ training }) => training.signals >= GEOMETRY_TRAIN_MINIMUM && training.expectancyR !== null)
+      .sort((left, right) => compareCandidateSummary({ summary: left.training }, { summary: right.training }));
+    const selected = eligible[0];
+    if (!selected) return { ...fold, selected: null, training: null, test: null };
+    return {
+      ...fold,
+      selected: selected.candidate,
+      training: selected.training,
+      test: {
+        ideal: summaryForFraction(selected.trades, start, end, fold.trainEnd, fold.testEnd, 0),
+        conservative: summaryForFraction(
+          selected.trades,
+          start,
+          end,
+          fold.trainEnd,
+          fold.testEnd,
+          FRICTION_SCENARIOS.conservative.totalBps,
+        ),
+      },
+    };
+  });
+  const completed = results.filter((fold) => fold.test !== null);
+  return {
+    method: "Anchored walk-forward inside the pre-OOS 85% only; each fold selects from earlier data and tests the next chronological window. The final 15% OOS remains sealed.",
+    selectionFrictionBps: FRICTION_SCENARIOS.conservative.totalBps,
+    folds: results,
+    positiveTestFoldsAfterFriction: completed.filter((fold) =>
+      (fold.test!.conservative.expectancyR ?? Number.NEGATIVE_INFINITY) > 0
+      && (fold.test!.conservative.profitFactor ?? 0) > 1).length,
+    evaluatedFolds: completed.length,
+  };
+}
+
+function summaryForFraction(
+  trades: BacktestTrade[],
+  start: Date,
+  end: Date,
+  from: number,
+  to: number,
+  frictionBps: number,
+) {
+  const duration = end.getTime() - start.getTime();
+  return summarizeBacktest(trades.filter((trade) => {
+    const point = (Date.parse(trade.openedAt) - start.getTime()) / duration;
+    return point >= from && point < to;
+  }), frictionBps);
+}
+
 function enrichEntriesWithClosedMtfContext(
   entries: EntryMap,
   data: Record<HistoricalTimeframe, TimeframeData>,
@@ -646,6 +1175,7 @@ function enrichEntriesWithClosedMtfContext(
     for (const entry of entries[timeframe]) {
       const decisionTime = Date.parse(data[timeframe].candles[entry.entryIndex].closeTime);
       let aligned = 0;
+      let referenceTrend: "bullish" | "bearish" | "sideways" | null = null;
       for (const contextTimeframe of COMMERCIAL_SIGNAL_TIMEFRAMES) {
         const index = lastClosedIndexAt(data[contextTimeframe].candles, decisionTime);
         if (index < 199) continue;
@@ -658,10 +1188,20 @@ function enrichEntriesWithClosedMtfContext(
           ).marketStructure.trend;
           trendCache.set(key, trend);
         }
+        if (contextTimeframe === "4h") referenceTrend = trend;
         if ((entry.direction === "LONG" && trend === "bullish")
           || (entry.direction === "SHORT" && trend === "bearish")) aligned += 1;
       }
       entry.alignedTimeframes = aligned;
+      entry.referenceTrendAtEntry = referenceTrend;
+      entry.trendRegimeAtEntry = referenceTrend === null
+        ? "UNAVAILABLE"
+        : referenceTrend === "sideways"
+          ? "SIDEWAYS"
+          : (entry.direction === "LONG" && referenceTrend === "bullish")
+              || (entry.direction === "SHORT" && referenceTrend === "bearish")
+            ? "ALIGNED_TREND"
+            : "OPPOSING_TREND";
     }
   }
 }
@@ -693,17 +1233,46 @@ function robustStudySummary(report: ReturnType<typeof buildRobustCandidateStudy>
     expectancyR: summary.expectancyR,
     profitFactor: summary.profitFactor,
     maximumDrawdownR: summary.maximumDrawdownR,
+    consecutiveLosses: summary.consecutiveLosses,
+    medianStopPct: summary.medianStopPct,
+    medianTargetPct: summary.medianTargetPct,
   }) : null;
+  const briefWalkForward = (study: ReturnType<typeof anchoredWalkForward>) => ({
+    method: study.method,
+    selectionFrictionBps: study.selectionFrictionBps,
+    positiveTestFoldsAfterFriction: study.positiveTestFoldsAfterFriction,
+    evaluatedFolds: study.evaluatedFolds,
+    folds: study.folds.map((fold) => ({
+      name: fold.name,
+      trainEnd: fold.trainEnd,
+      testEnd: fold.testEnd,
+      selected: fold.selected,
+      test: fold.test === null ? null : {
+        ideal: brief(fold.test.ideal),
+        conservative: brief(fold.test.conservative),
+      },
+    })),
+  });
   return {
     metadata: report.metadata,
     dataQuality: report.dataQuality,
     baseline: {
       overall: brief(report.baseline.overall),
+      frequency: report.baseline.frequency,
       oosFriction: Object.fromEntries(Object.entries(report.baseline.oosFriction)
         .map(([name, summary]) => [name, brief(summary)])),
+      distributions: Object.fromEntries(COMMERCIAL_SIGNAL_TIMEFRAMES.map((timeframe) => {
+        const diagnostic = report.baseline.distributions[timeframe];
+        return [timeframe, {
+          all: diagnostic.all,
+          timeToTargetCandles: diagnostic.timeToTargetCandles,
+          timeToStopCandles: diagnostic.timeToStopCandles,
+        }];
+      })),
     },
     selectedCombined: {
       overall: brief(report.selectedCombined.overall),
+      frequency: report.selectedCombined.frequency,
       oosFriction: Object.fromEntries(Object.entries(report.selectedCombined.oosFriction)
         .map(([name, summary]) => [name, brief(summary)])),
     },
@@ -715,8 +1284,14 @@ function robustStudySummary(report: ReturnType<typeof buildRobustCandidateStudy>
         benchmarkWinner?: RobustCandidate | null;
         reason?: string;
         selectionEvidenceConservative?: Record<"train" | "development" | "validation", BacktestSummary>;
-        baseline: { overall: BacktestSummary; oosFriction: Record<FrictionScenarioName, BacktestSummary> };
-        candidate?: { overall: BacktestSummary; periods: Record<BacktestPeriod, BacktestSummary>; oosFriction: Record<FrictionScenarioName, BacktestSummary> };
+        baseline: { overall: BacktestSummary; frequency?: ReturnType<typeof signalFrequency>; oosFriction: Record<FrictionScenarioName, BacktestSummary> };
+        candidate?: {
+          overall: BacktestSummary;
+          frequency: ReturnType<typeof signalFrequency>;
+          periods: Record<BacktestPeriod, BacktestSummary>;
+          oosFriction: Record<FrictionScenarioName, BacktestSummary>;
+          walkForward: ReturnType<typeof anchoredWalkForward>;
+        };
         promotionChecks?: Record<string, boolean>;
         shadowEligible?: boolean;
       };
@@ -731,15 +1306,69 @@ function robustStudySummary(report: ReturnType<typeof buildRobustCandidateStudy>
           : null,
         baseline: {
           overall: brief(item.baseline.overall),
+          frequency: item.baseline.frequency ?? null,
           oosFriction: Object.fromEntries(Object.entries(item.baseline.oosFriction).map(([name, summary]) => [name, brief(summary)])),
         },
         candidate: item.candidate ? {
           overall: brief(item.candidate.overall),
+          frequency: item.candidate.frequency,
           periods: Object.fromEntries(Object.entries(item.candidate.periods).map(([period, summary]) => [period, brief(summary)])),
           oosFriction: Object.fromEntries(Object.entries(item.candidate.oosFriction).map(([name, summary]) => [name, brief(summary)])),
+          walkForward: briefWalkForward(item.candidate.walkForward),
         } : null,
         promotionChecks: item.promotionChecks ?? null,
         shadowEligible: item.shadowEligible ?? false,
+      }];
+    })),
+  };
+}
+
+function robustSelectionSummary(
+  report: ReturnType<typeof robustStudySummary>,
+  focus: CommercialTimeframe | null,
+) {
+  const timeframes = focus === null ? COMMERCIAL_SIGNAL_TIMEFRAMES : [focus];
+  return {
+    metadata: {
+      analysisStart: report.metadata.analysisStart,
+      analysisEnd: report.metadata.analysisEnd,
+      geometry: report.metadata.geometry,
+      frictionScenarios: report.metadata.frictionScenarios,
+      selection: report.metadata.selection,
+    },
+    baseline: {
+      overall: report.baseline.overall,
+      frequency: report.baseline.frequency,
+      oosFriction: report.baseline.oosFriction,
+    },
+    selectedCombined: report.selectedCombined,
+    byTimeframe: Object.fromEntries(timeframes.map((timeframe) => {
+      const item = report.byTimeframe[timeframe];
+      return [timeframe, {
+        candidateCount: item.candidateCount,
+        selected: item.selected,
+        benchmarkWinner: item.benchmarkWinner,
+        reason: item.reason,
+        selectionEvidenceConservative: item.selectionEvidenceConservative,
+        baseline: item.baseline,
+        candidate: item.candidate === null ? null : {
+          overall: item.candidate.overall,
+          frequency: item.candidate.frequency,
+          periods: item.candidate.periods,
+          oosFriction: item.candidate.oosFriction,
+          walkForward: {
+            selectionFrictionBps: item.candidate.walkForward.selectionFrictionBps,
+            positiveTestFoldsAfterFriction: item.candidate.walkForward.positiveTestFoldsAfterFriction,
+            evaluatedFolds: item.candidate.walkForward.evaluatedFolds,
+            folds: item.candidate.walkForward.folds.map((fold) => ({
+              name: fold.name,
+              selected: fold.selected,
+              test: fold.test,
+            })),
+          },
+        },
+        promotionChecks: item.promotionChecks,
+        shadowEligible: item.shadowEligible,
       }];
     })),
   };
@@ -1080,6 +1709,26 @@ function fiveMinuteDiagnostics(baselineTrades: BacktestTrade[], candidateTrades:
   };
 }
 
+function timeframeDiagnostics(trades: BacktestTrade[]) {
+  const completed = trades.filter((trade) => trade.outcome !== "CENSORED");
+  return {
+    all: excursionDistribution(completed),
+    byOutcome: Object.fromEntries(([
+      "WIN",
+      "LOSS",
+      "EXPIRED",
+    ] as const).map((outcome) => [outcome, excursionDistribution(
+      completed.filter((trade) => trade.outcome === outcome),
+    )])),
+    timeToTargetCandles: distribution(
+      completed.filter((trade) => trade.outcome === "WIN").map((trade) => trade.durationCandles).filter(isNumber),
+    ),
+    timeToStopCandles: distribution(
+      completed.filter((trade) => trade.outcome === "LOSS").map((trade) => trade.durationCandles).filter(isNumber),
+    ),
+  };
+}
+
 function excursionDistribution(trades: BacktestTrade[]) {
   return {
     signals: trades.length,
@@ -1089,8 +1738,12 @@ function excursionDistribution(trades: BacktestTrade[]) {
     targetPct: distribution(trades.map((trade) => trade.targetPct).filter(isNumber)),
     mfeAtr: distribution(trades.map((trade) => trade.mfeAtr).filter(isNumber)),
     maeAtr: distribution(trades.map((trade) => trade.maeAtr).filter(isNumber)),
+    mfePct: distribution(trades.map((trade) => trade.mfePct).filter(isNumber)),
+    maePct: distribution(trades.map((trade) => trade.maePct).filter(isNumber)),
     mfeR: distribution(trades.map((trade) => trade.mfeR).filter(isNumber)),
     maeR: distribution(trades.map((trade) => trade.maeR).filter(isNumber)),
+    timeToMfeCandles: distribution(trades.map((trade) => trade.timeToMfeCandles).filter(isNumber)),
+    timeToMaeCandles: distribution(trades.map((trade) => trade.timeToMaeCandles).filter(isNumber)),
     durationCandles: distribution(trades.map((trade) => trade.durationCandles).filter(isNumber)),
   };
 }
@@ -1180,6 +1833,13 @@ function parseOptions(args: string[]) {
   if (!Number.isInteger(days) || days < 30 || days > 1_500) throw new Error("--days must be an integer between 30 and 1500.");
   const end = endValue ? new Date(endValue) : null;
   if (end && Number.isNaN(end.getTime())) throw new Error("--end must be an ISO-8601 timestamp.");
+  const focusValue = args.find((argument) => argument.startsWith("--focus="))?.split("=")[1];
+  const focus = focusValue === undefined
+    ? null
+    : COMMERCIAL_SIGNAL_TIMEFRAMES.find((timeframe) => timeframe === focusValue) ?? null;
+  if (focusValue !== undefined && focus === null) {
+    throw new Error(`--focus must be one of ${COMMERCIAL_SIGNAL_TIMEFRAMES.join(", ")}.`);
+  }
   return {
     days,
     end,
@@ -1189,6 +1849,8 @@ function parseOptions(args: string[]) {
     selection: args.includes("--selection"),
     baselineOnly: args.includes("--baseline-only"),
     robust: args.includes("--robust"),
+    longHorizon: args.includes("--long-horizon"),
+    focus,
   };
 }
 

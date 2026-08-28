@@ -1,7 +1,8 @@
 import type { BacktestSummary, BacktestTrade } from "./signal-backtest";
 
 export const ROBUST_STOP_ATR = [0.75, 1, 1.25, 1.5, 2] as const;
-export const ROBUST_TARGET_ATR = [1.25, 1.5, 1.75, 2, 2.5, 3] as const;
+export const ROBUST_STOP_PERCENT = [0.25, 0.3, 0.4, 0.5] as const;
+export const ROBUST_REWARD_RISK = [1.25, 1.5, 1.75, 2] as const;
 
 export type OfflineFilterName =
   | "NONE"
@@ -23,6 +24,12 @@ export type RobustGeometry = {
   rewardRisk: number;
 };
 
+export type RobustPercentageGeometry = {
+  stopPercent: number;
+  targetPercent: number;
+  rewardRisk: number;
+};
+
 export type PreOosCandidate<T> = {
   candidate: T;
   train: BacktestSummary;
@@ -31,9 +38,19 @@ export type PreOosCandidate<T> = {
 };
 
 export function buildRobustGeometryGrid(): RobustGeometry[] {
-  return ROBUST_STOP_ATR.flatMap((stopAtr) => ROBUST_TARGET_ATR
-    .filter((targetAtr) => targetAtr / stopAtr >= 1.5)
-    .map((targetAtr) => ({ stopAtr, targetAtr, rewardRisk: targetAtr / stopAtr })));
+  return ROBUST_STOP_ATR.flatMap((stopAtr) => ROBUST_REWARD_RISK.map((rewardRisk) => ({
+    stopAtr,
+    targetAtr: stopAtr * rewardRisk,
+    rewardRisk,
+  })));
+}
+
+export function buildRobustPercentageGrid(): RobustPercentageGeometry[] {
+  return ROBUST_STOP_PERCENT.flatMap((stopPercent) => ROBUST_REWARD_RISK.map((rewardRisk) => ({
+    stopPercent,
+    targetPercent: stopPercent * rewardRisk,
+    rewardRisk,
+  })));
 }
 
 export function passesOfflineFilter(

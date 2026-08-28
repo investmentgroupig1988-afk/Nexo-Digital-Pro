@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { HistoricalTimeframe } from "./historical";
 import {
+  causalVolatilityRegime,
   evaluateEntry,
+  baselineConfiguration,
   summarizeBacktest,
   validateCandleSeries,
   type BaselineEntry,
@@ -31,6 +33,33 @@ test("offline exits preserve R:R and use only candles after the entry", () => {
   assert.equal(trade.targetUsd, 15);
   assert.equal(trade.realizedR, 1.5);
   assert.equal(trade.durationCandles, 1);
+  assert.equal(trade.timeToMfeCandles, 1);
+  assert.equal(trade.timeToMaeCandles, 1);
+});
+
+test("offline research can measure R:R 1.25 without changing the 1.5 live baseline", () => {
+  const research = evaluateEntry(series([
+    [100, 101, 99, 100],
+    [100, 113, 99, 112],
+    [112, 114, 111, 113],
+  ]), entry(), { ...configuration, rewardRisk: 1.25 });
+
+  assert.equal(research.targetUsd / research.riskUsd, 1.25);
+  assert.equal(baselineConfiguration().rewardRisk, 1.5);
+});
+
+test("excursion timing records the first candle where MFE and MAE peak", () => {
+  const trade = evaluateEntry(series([
+    [100, 101, 99, 100],
+    [100, 104, 98, 102],
+    [102, 108, 99, 105],
+  ]), entry(), configuration);
+
+  assert.equal(trade.outcome, "EXPIRED");
+  assert.equal(trade.mfeUsd, 8);
+  assert.equal(trade.maeUsd, 2);
+  assert.equal(trade.timeToMfeCandles, 2);
+  assert.equal(trade.timeToMaeCandles, 1);
 });
 
 test("same-candle TP and SL ambiguity is resolved conservatively", () => {
@@ -116,6 +145,30 @@ test("candle quality identifies gaps, duplicates and incomplete data", () => {
   assert.equal(quality.duplicateTimestamps, 1);
   assert.equal(quality.gaps, 2);
   assert.equal(quality.incompleteCandles, 1);
+});
+
+test("volatility regime uses only the closed history available at the entry", () => {
+  const calm = Array.from({ length: 199 }, (_, index) => ({
+    timestamp: new Date(Date.UTC(2026, 0, 1, 0, index * 5)).toISOString(),
+    closeTime: new Date(Date.UTC(2026, 0, 1, 0, index * 5 + 5) - 1).toISOString(),
+    open: 100,
+    high: 101,
+    low: 99,
+    close: 100,
+    volume: 1,
+  }));
+  const highRange = {
+    ...calm.at(-1)!,
+    timestamp: new Date(Date.UTC(2026, 0, 1, 0, 199 * 5)).toISOString(),
+    closeTime: new Date(Date.UTC(2026, 0, 1, 0, 200 * 5) - 1).toISOString(),
+    high: 110,
+    low: 90,
+  };
+
+  const classified = causalVolatilityRegime([...calm, highRange]);
+
+  assert.equal(classified.volatilityRegimeAtEntry, "HIGH");
+  assert.equal(classified.volatilityPercentileAtEntry, 1);
 });
 
 function entry(): BaselineEntry {
