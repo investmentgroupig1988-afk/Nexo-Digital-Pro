@@ -4,6 +4,7 @@ import type { HistoricalTimeframe } from "./historical";
 import {
   causalVolatilityRegime,
   evaluateEntry,
+  evaluateClosedReplayDecision,
   baselineConfiguration,
   summarizeBacktest,
   validateCandleSeries,
@@ -11,6 +12,9 @@ import {
   type ClosedAnalysisCandle,
   type ExitConfiguration,
 } from "./signal-backtest";
+import { selectClosedHistoricalCandles } from "./historical";
+import { evaluateSignal } from "./signal-engine";
+import { calculateTechnicalAnalysis } from "./technical";
 
 const timeframe: HistoricalTimeframe = "5m";
 const configuration: ExitConfiguration = {
@@ -37,14 +41,14 @@ test("offline exits preserve R:R and use only candles after the entry", () => {
   assert.equal(trade.timeToMaeCandles, 1);
 });
 
-test("offline research can measure R:R 1.25 without changing the 1.5 live baseline", () => {
+test("offline research can measure R:R 1.0 without changing the 1.5 live baseline", () => {
   const research = evaluateEntry(series([
     [100, 101, 99, 100],
     [100, 113, 99, 112],
     [112, 114, 111, 113],
-  ]), entry(), { ...configuration, rewardRisk: 1.25 });
+  ]), entry(), { ...configuration, rewardRisk: 1 });
 
-  assert.equal(research.targetUsd / research.riskUsd, 1.25);
+  assert.equal(research.targetUsd / research.riskUsd, 1);
   assert.equal(baselineConfiguration().rewardRisk, 1.5);
 });
 
@@ -169,6 +173,42 @@ test("volatility regime uses only the closed history available at the entry", ()
 
   assert.equal(classified.volatilityRegimeAtEntry, "HIGH");
   assert.equal(classified.volatilityPercentileAtEntry, 1);
+});
+
+test("offline replay and the live boundary use identical closed candles and decision", () => {
+  const closed = Array.from({ length: 200 }, (_, index) => ({
+    timestamp: new Date(Date.UTC(2026, 0, 1, 0, index * 5)).toISOString(),
+    closeTime: new Date(Date.UTC(2026, 0, 1, 0, (index + 1) * 5) - 1).toISOString(),
+    open: 100 + index * 0.01,
+    high: 101 + index * 0.01,
+    low: 99 + index * 0.01,
+    close: 100 + index * 0.01,
+    volume: 100 + index,
+  }));
+  const forming = {
+    ...closed.at(-1)!,
+    timestamp: new Date(Date.UTC(2026, 0, 1, 0, 200 * 5)).toISOString(),
+    closeTime: new Date(Date.UTC(2026, 0, 1, 0, 201 * 5) - 1).toISOString(),
+    close: 1_000_000,
+    high: 1_000_001,
+  };
+  const observedAt = new Date(closed.at(-1)!.closeTime);
+  const source = [...closed, forming];
+
+  const liveCandles = selectClosedHistoricalCandles(source, observedAt, 200);
+  const liveTechnical = calculateTechnicalAnalysis(liveCandles, "binance");
+  const liveDecision = evaluateSignal({
+    symbol: "BTCUSDT",
+    timeframe: "5m",
+    candles: liveCandles,
+    technical: liveTechnical,
+  });
+  const replay = evaluateClosedReplayDecision({ candles: source, timeframe: "5m", observedAt });
+
+  assert.deepEqual(replay.candles, liveCandles);
+  assert.deepEqual(replay.technical, liveTechnical);
+  assert.deepEqual(replay.evaluation, liveDecision);
+  assert.equal(replay.candles.some((candle) => candle.timestamp === forming.timestamp), false);
 });
 
 function entry(): BaselineEntry {

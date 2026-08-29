@@ -1,11 +1,16 @@
-import type { HistoricalCandle, HistoricalTimeframe } from "./historical";
+import {
+  selectClosedHistoricalCandles,
+  type HistoricalCandle,
+  type HistoricalTimeframe,
+} from "./historical";
 import {
   evaluateSignal,
   MINIMUM_RISK_REWARD,
   SIGNAL_EXPIRATION_CANDLES,
+  type SignalEvaluation,
   type SignalDirection,
 } from "./signal-engine";
-import { calculateTechnicalAnalysis } from "./technical";
+import { calculateTechnicalAnalysis, type TechnicalAnalysisResult } from "./technical";
 
 export type ClosedAnalysisCandle = HistoricalCandle & { closeTime: string };
 export type BacktestOutcome = "WIN" | "LOSS" | "EXPIRED" | "CENSORED";
@@ -107,9 +112,15 @@ export type CandleQuality = {
   incompleteCandles: number;
 };
 
+export type ClosedReplayDecision = {
+  candles: ClosedAnalysisCandle[];
+  technical: TechnicalAnalysisResult;
+  evaluation: SignalEvaluation;
+};
+
 const FOLLOW_UP_EXPIRY_MULTIPLIER = 3;
 // Research-only floor. The live engine continues to enforce MINIMUM_RISK_REWARD (1.5).
-export const OFFLINE_MINIMUM_RISK_REWARD = 1.25;
+export const OFFLINE_MINIMUM_RISK_REWARD = 1;
 
 export function validateCandleSeries(
   candles: ClosedAnalysisCandle[],
@@ -154,9 +165,13 @@ export function generateBaselineEntries(
   for (let index = 199; index < candles.length; index += 1) {
     if (index < nextEligibleIndex) continue;
     if (analysisStart && Date.parse(candles[index].timestamp) < analysisStart.getTime()) continue;
-    const window = candles.slice(Math.max(0, index - 199), index + 1);
-    const technical = calculateTechnicalAnalysis(window, "binance");
-    const evaluation = evaluateSignal({ symbol: "BTCUSDT", timeframe, candles: window, technical });
+    const replay = evaluateClosedReplayDecision({
+      candles: candles.slice(Math.max(0, index - 199), index + 1),
+      timeframe,
+      observedAt: new Date(candles[index].closeTime),
+      limit: 200,
+    });
+    const { technical, evaluation } = replay;
     if (evaluation.outcome === "NO_SIGNAL") continue;
     const atrAtEntry = technical.indicators.atr14;
     if (atrAtEntry === null || atrAtEntry <= 0) continue;
@@ -188,7 +203,7 @@ export function generateBaselineEntries(
         technical.marketStructure.resistance,
         atrAtEntry,
       ),
-      ...causalVolatilityRegime(window),
+      ...causalVolatilityRegime(replay.candles),
     };
     entries.push(entry);
     const resolution = evaluateEntry(candles, entry, baselineConfiguration());
@@ -198,6 +213,35 @@ export function generateBaselineEntries(
   }
 
   return entries;
+}
+
+/**
+ * Offline/replay boundary for the frozen live strategy. It intentionally uses
+ * the same closed-candle selector as the Binance live adapter before invoking
+ * the same technical-analysis and signal-decision functions.
+ */
+export function evaluateClosedReplayDecision(input: {
+  candles: ClosedAnalysisCandle[];
+  timeframe: HistoricalTimeframe;
+  observedAt: Date;
+  limit?: number;
+}): ClosedReplayDecision {
+  const candles = selectClosedHistoricalCandles(
+    input.candles,
+    input.observedAt,
+    input.limit ?? 200,
+  );
+  const technical = calculateTechnicalAnalysis(candles, "binance");
+  return {
+    candles,
+    technical,
+    evaluation: evaluateSignal({
+      symbol: "BTCUSDT",
+      timeframe: input.timeframe,
+      candles,
+      technical,
+    }),
+  };
 }
 
 export function causalVolatilityRegime(candles: ClosedAnalysisCandle[]): {

@@ -40,6 +40,8 @@ yarn-debug.log*
 yarn-error.log*
 *.log
 logs/
+/artifacts/api-server/research/cache/
+/artifacts/api-server/research/output/
 *.pid
 *.pid.lock
 *.tmp

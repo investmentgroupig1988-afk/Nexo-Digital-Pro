@@ -12,6 +12,8 @@
     "analyze:signals:v3": "tsx src/scripts/analyze-signal-v3.ts",
     "analyze:signals:v4": "tsx src/scripts/analyze-signal-v4.ts",
     "analyze:signals:v5": "tsx src/scripts/analyze-signal-v5.ts",
+    "research:v6:hash": "tsx src/scripts/print-signal-v6-hash.ts",
+    "test:v6": "tsx --test src/services/signal-backtest.test.ts src/services/signal-research-dataset.test.ts src/services/signal-strategy-v6-snapshot.test.ts",
     "research:validate:frozen-1h": "tsx src/scripts/validate-frozen-1h-hypothesis.ts",
     "research:forward:btc-1h": "tsx src/scripts/validate-frozen-1h-hypothesis.ts --forward-btc --write-ledger",
     "research:robustness:btc-1h": "tsx src/scripts/analyze-frozen-1h-btc-robustness.ts",
