@@ -50,6 +50,12 @@ type RobustCandidate = {
   filter: OfflineFilterName;
   configuration: ExitConfiguration;
 };
+type CloseoutCandidate = {
+  id: "CANDIDATE_A" | "CANDIDATE_B" | "CANDIDATE_C";
+  hypothesis: string;
+  activeTimeframes: readonly CommercialTimeframe[];
+  configuration: ExitConfiguration;
+};
 type GeometrySelection = {
   selected: ExitConfiguration | null;
   insufficientSample: boolean;
@@ -165,6 +171,44 @@ const FRICTION_SCENARIOS: Record<FrictionScenarioName, FrictionScenario> = {
     note: "Twenty basis points total round trip; conservative sensitivity scenario, not an exchange fee promise.",
   },
 };
+const CLOSEOUT_CANDIDATES: readonly CloseoutCandidate[] = [
+  {
+    id: "CANDIDATE_A",
+    hypothesis: "Compact volatility-normalized exit near the observed median favorable excursion.",
+    activeTimeframes: COMMERCIAL_SIGNAL_TIMEFRAMES,
+    configuration: {
+      name: "CLOSEOUT_A_ATR_1_RR_1_5",
+      riskMode: "ATR",
+      atrMultiple: 1,
+      rewardRisk: 1.5,
+      expiryCandles: 12,
+    },
+  },
+  {
+    id: "CANDIDATE_B",
+    hypothesis: "Balanced volatility-normalized exit between median and upper-quartile favorable excursion.",
+    activeTimeframes: COMMERCIAL_SIGNAL_TIMEFRAMES,
+    configuration: {
+      name: "CLOSEOUT_B_ATR_1_25_RR_1_5",
+      riskMode: "ATR",
+      atrMultiple: 1.25,
+      rewardRisk: 1.5,
+      expiryCandles: 12,
+    },
+  },
+  {
+    id: "CANDIDATE_C",
+    hypothesis: "Selective 15m-only configuration; exclude persistently weak 1h and avoid relying on noisy 5m or under-sampled 4h.",
+    activeTimeframes: ["15m"],
+    configuration: {
+      name: "CLOSEOUT_C_15M_ATR_1_5_RR_1_5",
+      riskMode: "ATR",
+      atrMultiple: 1.5,
+      rewardRisk: 1.5,
+      expiryCandles: 12,
+    },
+  },
+];
 
 const options = parseOptions(process.argv.slice(2));
 const serverTime = await getBinance<ServerTime>("/time", {});
@@ -182,6 +226,11 @@ const entries = Object.fromEntries(COMMERCIAL_SIGNAL_TIMEFRAMES.map((timeframe) 
 ])) as EntryMap;
 
 const baseline = evaluateAcrossTimeframes(entries, fetched, () => baselineConfiguration());
+if (options.closeout) {
+  const closeout = buildCloseoutComparison(baseline, entries, fetched, analysisStart, observedAt, options.days);
+  console.log(JSON.stringify(roundDeep(closeout), null, 2));
+  process.exit(0);
+}
 if (options.longHorizon) {
   enrichEntriesWithClosedMtfContext(entries, fetched);
   const enrichedBaseline = evaluateAcrossTimeframes(entries, fetched, () => baselineConfiguration());
@@ -418,6 +467,105 @@ function evaluateAcrossTimeframes(
     timeframe,
     evaluateEntries(data[timeframe].candles, cohort[timeframe], configuration(timeframe)),
   ])) as TradeMap;
+}
+
+function buildCloseoutComparison(
+  baselineTrades: TradeMap,
+  cohort: EntryMap,
+  data: Record<HistoricalTimeframe, TimeframeData>,
+  start: Date,
+  end: Date,
+  days: number,
+) {
+  const candidateRows = CLOSEOUT_CANDIDATES.map((candidate) => {
+    const active = new Set<CommercialTimeframe>(candidate.activeTimeframes);
+    const trades = Object.fromEntries(COMMERCIAL_SIGNAL_TIMEFRAMES.map((timeframe) => [
+      timeframe,
+      active.has(timeframe)
+        ? evaluateEntries(data[timeframe].candles, cohort[timeframe], candidate.configuration)
+        : [],
+    ])) as TradeMap;
+    return closeoutRow(candidate.id, candidate.hypothesis, candidate.configuration, candidate.activeTimeframes, trades, start, end, days);
+  });
+  const baselineRow = closeoutRow(
+    "BASELINE",
+    "Frozen live control.",
+    baselineConfiguration(),
+    COMMERCIAL_SIGNAL_TIMEFRAMES,
+    baselineTrades,
+    start,
+    end,
+    days,
+  );
+  return {
+    metadata: {
+      provider: "Binance public Spot BTCUSDT klines",
+      analysisStart: start.toISOString(),
+      analysisEnd: end.toISOString(),
+      days,
+      candidateCount: CLOSEOUT_CANDIDATES.length,
+      candlePolicy: "Only Binance klines with closeTime <= observation time are eligible.",
+      entryPolicy: "All candidates reuse the frozen baseline entry cohort; no candidate can add an entry.",
+      expiryCandlesChanged: false,
+      parameterSearch: false,
+      databaseWrites: false,
+      telegramCalls: false,
+      liveStrategyChanged: false,
+    },
+    dataQuality: Object.fromEntries(COMMERCIAL_SIGNAL_TIMEFRAMES.map((timeframe) => [timeframe, {
+      ...validateCandleSeries(data[timeframe].candles, INTERVAL_MS[timeframe], end),
+      incompleteExcluded: data[timeframe].incompleteExcluded,
+    }])),
+    baseline: baselineRow,
+    candidates: candidateRows,
+    decisionRule: "A candidate is defendible only if OOS expectancy and PF exceed baseline, OOS expectancy is positive and PF > 1 at both 0 and 5 bps, OOS drawdown is controlled, EXPIRED falls, and DEVELOPMENT/VALIDATION/OOS do not reveal material instability.",
+  };
+}
+
+function closeoutRow(
+  id: string,
+  hypothesis: string,
+  configuration: ExitConfiguration,
+  activeTimeframes: readonly CommercialTimeframe[],
+  trades: TradeMap,
+  start: Date,
+  end: Date,
+  days: number,
+) {
+  const all = COMMERCIAL_SIGNAL_TIMEFRAMES.flatMap((timeframe) => trades[timeframe]);
+  const period = (name: BacktestPeriod, frictionBps: number) => summarizeBacktest(
+    all.filter((trade) => assignPeriod(trade.openedAt, start, end) === name),
+    frictionBps,
+  );
+  return {
+    id,
+    hypothesis,
+    configuration,
+    activeTimeframes,
+    signalsPerDay: all.length / days,
+    full: { ideal: compactCloseoutSummary(summarizeBacktest(all, 0)), fiveBps: compactCloseoutSummary(summarizeBacktest(all, 5)) },
+    periods: Object.fromEntries(PERIODS.map((name) => [name, {
+      ideal: compactCloseoutSummary(period(name, 0)),
+      fiveBps: compactCloseoutSummary(period(name, 5)),
+    }])),
+    byTimeframe: Object.fromEntries(COMMERCIAL_SIGNAL_TIMEFRAMES.map((timeframe) => [timeframe, {
+      ideal: compactCloseoutSummary(summarizeBacktest(trades[timeframe], 0)),
+      fiveBps: compactCloseoutSummary(summarizeBacktest(trades[timeframe], 5)),
+    }])),
+  };
+}
+
+function compactCloseoutSummary(summary: BacktestSummary) {
+  return {
+    signals: summary.signals,
+    wins: summary.wins,
+    losses: summary.losses,
+    expired: summary.expired,
+    expiredPct: summary.expiredRate,
+    expectancyR: summary.expectancyR,
+    profitFactor: summary.profitFactor,
+    maximumDrawdownR: summary.maximumDrawdownR,
+  };
 }
 
 type EntryQualityCandidate = {
@@ -1850,6 +1998,7 @@ function parseOptions(args: string[]) {
     baselineOnly: args.includes("--baseline-only"),
     robust: args.includes("--robust"),
     longHorizon: args.includes("--long-horizon"),
+    closeout: args.includes("--closeout"),
     focus,
   };
 }

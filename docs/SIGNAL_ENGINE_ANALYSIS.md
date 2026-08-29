@@ -22,6 +22,9 @@ corepack pnpm run analyze:signals -- --days=365 --robust --terse
 corepack pnpm run analyze:signals -- --days=365 --robust --selection
 corepack pnpm run analyze:signals -- --days=1461 --end=2026-08-28T00:00:00.000Z --long-horizon --compact
 corepack pnpm run analyze:signals -- --days=1461 --end=2026-08-28T00:00:00.000Z --long-horizon --compact --focus=15m
+corepack pnpm run analyze:signals:v2 -- --days=1461 --end=2026-08-28T00:00:00.000Z --compact
+corepack pnpm run analyze:signals:v3 -- --days=1461 --end=2026-08-28T00:00:00.000Z --terse
+corepack pnpm run analyze:signals:v4 -- --days=1461 --end=2026-08-28T00:00:00.000Z --summary
 ```
 
 Use `--end=<ISO-8601 timestamp>` to reproduce a fixed cutoff. Use `--baseline-only` when validating the immutable strategy without running any candidate grid. `--robust --selection --focus=<5m|15m|1h|4h>` prints one timeframe without changing the study. Omit `--terse` for the complete report.
@@ -62,6 +65,12 @@ The report also includes MFE/MAE, distance in USD/percent/ATR, duration, post-ex
 Its anchored chronological folds are `0-40/40-55`, `0-55/55-70`, `0-70/70-85`, and `0-85/85-100`. Candidate choice in every fold uses only the preceding portion at 10 bps. The latest 15% is therefore a holdout inside that run, but it is not described as genuinely untouched because its dates overlap the earlier one-year research. Observations after the earlier fixed cutoff are reported separately and must accumulate before they can validate a strategy.
 
 Volatility and trend labels are descriptive research dimensions. They do not alter the scheduler, live strategy, persisted history, Telegram, or any production path. A result is not considered robust unless it survives multiple chronological windows, friction, sufficient sample size, concentration checks, and the final holdout.
+
+Strategy V2 uses a separate manual runner and a staged selection protocol: entry quality first, then a bounded ATR exit grid, then expiry, with the final 20% withheld from every selector. Its results and rejection decision are documented in `docs/SIGNAL_STRATEGY_V2_RESEARCH_2026-08-28.md`.
+
+Strategy V3 freezes 25 entry-quality hypotheses, evaluates every entry first with the baseline exit, and permits a four-item exit study only after a pre-sealed entry gate. HOLDOUT and PSEUDO_FORWARD remain unavailable to selectors. Its results and rejection decision are documented in `docs/SIGNAL_STRATEGY_V3_RESEARCH_2026-08-28.md`.
+
+Strategy V4 uses nine equally weighted, causal factors to rank the frozen baseline opportunities. Score percentiles come only from DEVELOPMENT, and HOLDOUT/PSEUDO_FORWARD remain unavailable to selectors. Its negative result, rejection of every threshold, and decision not to run the optional ML experiment are documented in `docs/SIGNAL_STRATEGY_V4_RESEARCH_2026-08-28.md`.
 
 ## Interpretation limits
 
