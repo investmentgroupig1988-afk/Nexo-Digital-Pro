@@ -1,6 +1,6 @@
 # TRENORO Signal Engine V6 — investigación cuantitativa
 
-Fecha de cierre: 29 de agosto de 2026  
+Fecha de cierre: 29 de agosto de 2026
 Estado: **REJECT — no se demostró un edge positivo robusto**
 
 ## Resumen ejecutivo
