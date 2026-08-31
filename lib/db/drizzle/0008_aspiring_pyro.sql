@@ -1,0 +1,1 @@
+ALTER TABLE "shadow_research_signals" ADD CONSTRAINT "shadow_research_signal_fingerprint_frozen" CHECK ("shadow_research_signals"."strategy_fingerprint" = '9bfe79d79c73d17b73a9c7e1eb62532af644cc6065aeecc8b3020783142e6089');

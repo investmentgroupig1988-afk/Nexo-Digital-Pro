@@ -146,6 +146,7 @@ export const config = {
   appPublicUrl: parseOptionalUrl("APP_PUBLIC_URL"),
   supportWhatsappNumber: process.env.SUPPORT_WHATSAPP_NUMBER?.trim() || undefined,
   whatsappCommunityUrl: parseOptionalWhatsAppCommunityUrl("WHATSAPP_COMMUNITY_URL"),
+  shadowResearchEnabled: parseBoolean("SHADOW_RESEARCH_ENABLED", false),
   legalIdentity: createLegalIdentity({
     operatorName: process.env.LEGAL_OPERATOR_NAME,
     taxId: process.env.LEGAL_TAX_ID,

@@ -16,7 +16,8 @@ test("the production migration set applies from empty PostgreSQL and is idempote
     const first = await client.query<{ count: number }>(
       'select count(*)::int as count from drizzle."__drizzle_migrations"',
     );
-    assert.equal(first.rows[0]?.count, 7);
+    const migrationCount = (await readdir(migrationsFolder)).filter((file) => /^\d+_.+\.sql$/.test(file)).length;
+    assert.equal(first.rows[0]?.count, migrationCount);
 
     await migrate(database, { migrationsFolder });
     const second = await client.query<{ count: number }>(
@@ -28,7 +29,7 @@ test("the production migration set applies from empty PostgreSQL and is idempote
       "select table_name from information_schema.tables where table_schema = 'public'",
     );
     const names = new Set(tables.rows.map((row) => row.table_name));
-    for (const required of ["user", "account", "session", "access_grants", "payment_requests", "signals", "notification_deliveries", "consumer_requests", "consumer_request_events"]) {
+    for (const required of ["user", "account", "session", "access_grants", "payment_requests", "signals", "notification_deliveries", "shadow_research_signals", "consumer_requests", "consumer_request_events"]) {
       assert.ok(names.has(required), `missing table after migration: ${required}`);
     }
   } finally {

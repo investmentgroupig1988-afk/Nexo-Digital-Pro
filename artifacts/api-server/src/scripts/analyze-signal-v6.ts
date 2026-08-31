@@ -129,7 +129,22 @@ for (const timeframe of V6_TIMEFRAMES) {
   const trainEntries = entries[timeframe].filter((entry) => v6Period(entry.openedAt) === "TRAIN");
   thresholds[timeframe] = deriveV4Thresholds(trainEntries);
   console.error(`[V6] ${timeframe}: ${entries[timeframe].length} opportunities; TRAIN quality thresholds frozen`);
+
+  // --- CHEQUEO PUNTUAL: NORMAL_VOLATILITY con rewardRisk=1.0 ---
+  // Aditivo, no reemplaza ni modifica el pipeline v6 existente.
+  if (timeframe === "1h" || timeframe === "4h" || timeframe === "15m" || timeframe === "5m") {
+    const rr1Exit: ExitConfiguration = { ...baselineConfiguration(), name: "CHECK_RR1", rewardRisk: 1.0 };
+    const rr1Run = runCandidate(timeframe, "NORMAL_VOLATILITY", rr1Exit);
+    const rr1Train = summarizeBacktest(tradesInV6Period(rr1Run.trades, "TRAIN"), 5);
+    const rr1Dev = summarizeBacktest(tradesInV6Period(rr1Run.trades, "DEVELOPMENT"), 5);
+    const rr1Val = summarizeBacktest(tradesInV6Period(rr1Run.trades, "VALIDATION"), 5);
+    console.error(`\n[CHECK_RR1] ${timeframe} NORMAL_VOLATILITY rewardRisk=1.0 (vs. shortlist real con 1.5):`);
+    console.error(`  TRAIN:       expectancyR=${rr1Train.expectancyR} PF=${rr1Train.profitFactor} n=${rr1Train.signals}`);
+    console.error(`  DEVELOPMENT: expectancyR=${rr1Dev.expectancyR} PF=${rr1Dev.profitFactor} n=${rr1Dev.signals}`);
+    console.error(`  VALIDATION:  expectancyR=${rr1Val.expectancyR} PF=${rr1Val.profitFactor} n=${rr1Val.signals}`);
+  }
 }
+
 
 const ablationStudies = Object.fromEntries(V6_TIMEFRAMES.map((timeframe) => {
   console.error(`[V6] running frozen-filter ablations for ${timeframe}`);

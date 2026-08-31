@@ -56,6 +56,7 @@ APP_PUBLIC_URL=https://staging.trenoro.com
 TELEGRAM_BOT_TOKEN=<bot exclusivo de staging>
 TELEGRAM_CHAT_ID=<chat/canal exclusivo de staging>
 NOTIFICATION_PUBLIC_URL=https://staging.trenoro.com/
+SHADOW_RESEARCH_ENABLED=false
 LEGAL_OPERATOR_NAME=<nombre y apellido oficial>
 LEGAL_TAX_ID=<CUIT oficial>
 LEGAL_ADDRESS=<domicilio oficial>
@@ -64,6 +65,10 @@ LEGAL_EMAIL=<email legal/privacidad oficial>
 SUPPORT_WHATSAPP_NUMBER=<número oficial para soporte y AVISAR PAGO POR WHATSAPP, solo dígitos; no reemplaza el contacto obligatorio de la solicitud>
 WHATSAPP_COMMUNITY_URL=<opcional; invitación https://chat.whatsapp.com/...; vacío oculta el botón>
 ```
+
+V11 shadow se entrega apagado. Sólo después de aplicar la migración y revisar
+`/api/admin/shadow-research`, cambiar `SHADOW_RESEARCH_ENABLED=true` en Railway
+**staging** y redeployar ese environment. No existe variable equivalente en Vercel.
 
 Los valores entre `<...>` son acciones manuales, no valores para copiar literalmente. Railway debe generar secretos distintos para staging y producción. Después de cargar variables, hacer redeploy y comprobar `/api/healthz`; luego ingresar como admin y revisar `/api/admin/readiness`.
 
@@ -100,6 +105,7 @@ RESEND_API_KEY=<secreto Resend>
 AUTH_EMAIL_FROM=<remitente verificado>
 TELEGRAM_BOT_TOKEN=<bot producción>
 TELEGRAM_CHAT_ID=<chat producción>
+SHADOW_RESEARCH_ENABLED=false
 SUPPORT_WHATSAPP_NUMBER=<número oficial para soporte y AVISAR PAGO POR WHATSAPP, solo dígitos; no reemplaza el contacto obligatorio de la solicitud>
 WHATSAPP_COMMUNITY_URL=<opcional; invitación https://chat.whatsapp.com/...; vacío oculta el botón>
 LEGAL_OPERATOR_NAME=<dato oficial>

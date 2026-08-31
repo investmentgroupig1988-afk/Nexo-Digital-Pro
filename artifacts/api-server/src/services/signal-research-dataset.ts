@@ -41,7 +41,7 @@ const INTERVAL_MS: Record<HistoricalTimeframe, number> = {
 };
 
 export async function loadOrFetchResearchDataset(input: {
-  symbol: "BTCUSDT";
+  symbol: string;
   timeframe: HistoricalTimeframe;
   start: Date;
   endExclusive: Date;
@@ -128,7 +128,7 @@ async function readCache(dataPath: string, metadataPath: string): Promise<Resear
 }
 
 async function fetchClosedDataset(input: {
-  symbol: "BTCUSDT";
+  symbol: string;
   timeframe: HistoricalTimeframe;
   start: Date;
   endExclusive: Date;

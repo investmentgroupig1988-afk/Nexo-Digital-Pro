@@ -3,6 +3,8 @@ import { getBinance, type MarketCandle } from "./market";
 
 export const SUPPORTED_TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h"] as const;
 export type HistoricalTimeframe = (typeof SUPPORTED_TIMEFRAMES)[number];
+export const RESEARCH_BINANCE_SYMBOLS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"] as const;
+export type ResearchBinanceSymbol = (typeof RESEARCH_BINANCE_SYMBOLS)[number];
 
 const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 1_000;
@@ -84,6 +86,8 @@ const inFlight = new Map<
   string,
   Promise<Extract<HistoricalDataResult, { status: "OK" }>>
 >();
+const researchCache = new Map<string, { expiresAt: number; candles: BinanceHistoricalCandle[] }>();
+const researchInFlight = new Map<string, Promise<BinanceHistoricalCandle[]>>();
 let binanceServerTimeInFlight: Promise<number> | undefined;
 
 export function parseHistoricalTimeframe(value: string | undefined): HistoricalTimeframe {
@@ -267,4 +271,39 @@ export function toMarketCandles(candles: HistoricalCandle[]): MarketCandle[] {
     close: candle.close,
     volume: candle.volume ?? 0,
   }));
+}
+
+/** Internal-only market feed for isolated forward research cohorts. */
+export async function getResearchHistoricalCandles(
+  symbol: ResearchBinanceSymbol,
+  timeframe: "4h",
+  limit = DEFAULT_LIMIT,
+): Promise<BinanceHistoricalCandle[]> {
+  if (!(RESEARCH_BINANCE_SYMBOLS as readonly string[]).includes(symbol)) {
+    throw new HistoricalDataError("Unsupported research symbol.", 400);
+  }
+  if (!Number.isInteger(limit) || limit < 101 || limit > MAX_LIMIT) {
+    throw new HistoricalDataError("Research candle limit must be between 101 and 1000.", 400);
+  }
+
+  const cacheKey = `shadow:${symbol}:${timeframe}:${limit}`;
+  const cached = researchCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.candles;
+  const currentRequest = researchInFlight.get(cacheKey);
+  if (currentRequest) return currentRequest;
+
+  const request = Promise.all([
+    getBinanceServerTime(),
+    getBinance<BinanceKline[]>("/klines", { symbol, interval: timeframe, limit: Math.min(limit + 1, MAX_LIMIT) }),
+  ]).then(([observedAt, rawCandles]) => {
+    if (!Array.isArray(rawCandles) || rawCandles.length === 0) {
+      throw new HistoricalDataError("Binance returned no research candles.");
+    }
+    const candles = selectClosedBinanceCandles(rawCandles, observedAt, limit);
+    if (candles.length < 101) throw new HistoricalDataError("Insufficient closed research candles.");
+    researchCache.set(cacheKey, { candles, expiresAt: Date.now() + CACHE_TTL_MS });
+    return candles;
+  }).finally(() => researchInFlight.delete(cacheKey));
+  researchInFlight.set(cacheKey, request);
+  return request;
 }

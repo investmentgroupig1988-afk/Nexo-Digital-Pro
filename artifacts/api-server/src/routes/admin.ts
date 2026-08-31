@@ -9,6 +9,7 @@ import { listPaymentRequests, PaymentRequestError, reviewPaymentRequest } from "
 import { serializeAccess } from "./account";
 import { getSignalEngineHealth } from "../services/signal-refresh";
 import { getAdminReadiness } from "../services/readiness";
+import { getShadowResearchAdminView } from "../services/signal-shadow-research";
 
 const router: IRouter = Router();
 const userIdSchema = z.string().trim().min(1).max(128);
@@ -242,6 +243,14 @@ router.get("/admin/signal-engine", (_req, res) => {
 router.get("/admin/readiness", async (_req, res, next) => {
   try {
     res.json(await getAdminReadiness());
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/admin/shadow-research", async (_req, res, next) => {
+  try {
+    res.json(await getShadowResearchAdminView());
   } catch (error) {
     next(error);
   }

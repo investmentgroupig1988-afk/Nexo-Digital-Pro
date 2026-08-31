@@ -265,6 +265,52 @@ export const notificationDeliveries = pgTable("notification_deliveries", {
   check("notification_deliveries_status_valid", sql`${table.status} IN ('PENDING', 'SENDING', 'DELIVERED', 'FAILED')`),
 ]);
 
+/**
+ * Forward-only research ledger. It is deliberately independent from commercial
+ * signals and notification deliveries so shadow observations cannot leak into
+ * customer history, metrics, or provider outboxes.
+ */
+export const shadowResearchSignals = pgTable("shadow_research_signals", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  strategyVersion: varchar("strategy_version", { length: 64 }).notNull(),
+  strategyFingerprint: varchar("strategy_fingerprint", { length: 64 }).notNull(),
+  symbol: varchar("symbol", { length: 16 }).notNull(),
+  timeframe: varchar("timeframe", { length: 8 }).notNull(),
+  detectedAt: timestamp("detected_at", { withTimezone: true }).notNull(),
+  sourceCandleCloseAt: timestamp("source_candle_close_at", { withTimezone: true }).notNull(),
+  hypotheticalEntry: numeric("hypothetical_entry", { precision: 20, scale: 8 }).notNull(),
+  hypotheticalStop: numeric("hypothetical_stop", { precision: 20, scale: 8 }).notNull(),
+  hypotheticalTarget: numeric("hypothetical_target", { precision: 20, scale: 8 }).notNull(),
+  direction: varchar("direction", { length: 16 }).notNull(),
+  costsModel: jsonb("costs_model").notNull(),
+  status: varchar("status", { length: 16 }).notNull().default("OPEN"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  realizedR: numeric("realized_r", { precision: 16, scale: 8 }),
+  technicalSnapshot: jsonb("technical_snapshot").notNull(),
+  createdAt,
+  updatedAt,
+}, (table) => [
+  uniqueIndex("shadow_research_signal_dedupe_unique").on(
+    table.strategyVersion,
+    table.symbol,
+    table.timeframe,
+    table.sourceCandleCloseAt,
+    table.direction,
+  ),
+  uniqueIndex("shadow_research_signal_open_unique")
+    .on(table.strategyVersion, table.symbol, table.timeframe)
+    .where(sql`${table.status} = 'OPEN'`),
+  index("shadow_research_signal_status_index").on(table.status, table.detectedAt),
+  index("shadow_research_signal_symbol_index").on(table.symbol, table.detectedAt),
+  check("shadow_research_signal_version_frozen", sql`${table.strategyVersion} = 'RSI_DIVERGENCE_STRUCTURAL_4H_V1'`),
+  check("shadow_research_signal_fingerprint_frozen", sql`${table.strategyFingerprint} = '9bfe79d79c73d17b73a9c7e1eb62532af644cc6065aeecc8b3020783142e6089'`),
+  check("shadow_research_signal_symbol_valid", sql`${table.symbol} IN ('BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT')`),
+  check("shadow_research_signal_timeframe_frozen", sql`${table.timeframe} = '4h'`),
+  check("shadow_research_signal_direction_valid", sql`${table.direction} IN ('LONG', 'SHORT')`),
+  check("shadow_research_signal_status_valid", sql`${table.status} IN ('OPEN', 'WIN', 'LOSS', 'EXPIRED')`),
+]);
+
 /** Public consumer requests. Refunds and access cancellation always require human review. */
 export const consumerRequests = pgTable("consumer_requests", {
   id: uuid("id").defaultRandom().primaryKey(),

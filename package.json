@@ -25,6 +25,10 @@
     "analyze:signals:v4": "corepack pnpm --filter @workspace/api-server analyze:signals:v4",
     "analyze:signals:v5": "corepack pnpm --filter @workspace/api-server analyze:signals:v5",
     "analyze:signals:v6": "corepack pnpm --filter @workspace/api-server analyze:signals:v6",
+    "analyze:signals:v7": "corepack pnpm --filter @workspace/api-server analyze:signals:v7",
+    "analyze:signals:v8": "corepack pnpm --filter @workspace/api-server analyze:signals:v8",
+    "analyze:signals:v9": "corepack pnpm --filter @workspace/api-server analyze:signals:v9",
+    "analyze:signals:v10": "corepack pnpm --filter @workspace/api-server analyze:signals:v10",
     "research:validate:frozen-1h": "corepack pnpm --filter @workspace/api-server research:validate:frozen-1h",
     "research:forward:btc-1h": "corepack pnpm --filter @workspace/api-server research:forward:btc-1h",
     "research:robustness:btc-1h": "corepack pnpm --filter @workspace/api-server research:robustness:btc-1h"
