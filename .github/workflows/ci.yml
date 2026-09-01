@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, deploy-ready-v1]
+  push:
+    branches: [main, deploy-ready-v1]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Install, typecheck, test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24.x"
+          package-manager-cache: false
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install locked dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: corepack pnpm run typecheck
+
+      - name: Test
+        run: corepack pnpm run test
+
+      - name: Build
+        run: corepack pnpm run build

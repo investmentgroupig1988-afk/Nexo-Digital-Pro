@@ -1,0 +1,9 @@
+export {
+  buildPaymentReviewWhatsAppMessage,
+  FOUNDERS_OFFER,
+  GLOBAL_SUPPORT_WHATSAPP_MESSAGE,
+  PRODUCT,
+  PRODUCT_DISPLAY_NAME,
+  PRODUCT_DISPLAY_NAME_UPPER,
+  PRODUCT_MARK,
+} from "@workspace/product";

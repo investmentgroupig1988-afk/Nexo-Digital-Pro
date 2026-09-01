@@ -1,0 +1,69 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1787113405987,
+      "tag": "0000_groovy_kat_farrell",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787168870273,
+      "tag": "0001_colorful_stryfe",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787239249431,
+      "tag": "0002_magical_gamma_corps",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787258215205,
+      "tag": "0003_first_bloodscream",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787419200000,
+      "tag": "0004_signal_notification_outbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787529600000,
+      "tag": "0005_trenoro_prelaunch",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787698800000,
+      "tag": "0006_payment_request_whatsapp",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788201775133,
+      "tag": "0007_lush_scalphunter",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788201986415,
+      "tag": "0008_aspiring_pyro",
+      "breakpoints": true
+    }
+  ]
+}

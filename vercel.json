@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "corepack pnpm install --frozen-lockfile",
+  "buildCommand": "corepack pnpm --filter @workspace/mockup-sandbox run build",
+  "outputDirectory": "artifacts/mockup-sandbox/dist",
+  "redirects": [
+    { "source": "/", "has": [{ "type": "host", "value": "trenoro.com" }], "destination": "https://www.trenoro.com/", "permanent": true },
+    { "source": "/(.*)", "has": [{ "type": "host", "value": "trenoro.lat" }], "destination": "https://www.trenoro.com/$1", "permanent": true },
+    { "source": "/(.*)", "has": [{ "type": "host", "value": "www.trenoro.lat" }], "destination": "https://www.trenoro.com/$1", "permanent": true }
+  ],
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
